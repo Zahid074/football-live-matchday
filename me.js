@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { pool } from "../db.js";
-import { loginWithGoogle, requireAuth } from "../auth.js";
+import { pool } from "./db.js";
+import { loginWithGoogle, requireAuth } from "./auth.js";
 
 const router = Router();
 
