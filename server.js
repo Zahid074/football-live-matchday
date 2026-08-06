@@ -1,11 +1,11 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import leaguesRouter from "./routes/leagues.js";
-import clubsRouter from "./routes/clubs.js";
-import matchesRouter from "./routes/matches.js";
-import meRouter from "./routes/me.js";
-import { startCronJobs } from "./cron/index.js";
+import leaguesRouter from "./leagues.js";
+import clubsRouter from "./clubs.js";
+import matchesRouter from "./matches.js";
+import meRouter from "./me.js";
+import { startCronJobs } from "./index.js";
 
 const app = express();
 
