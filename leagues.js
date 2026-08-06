@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { pool } from "../db.js";
-import * as api from "../services/footballApi.js";
+import { pool } from "./db.js";
+import * as api from "./footballApi.js";
 
 const router = Router();
 
