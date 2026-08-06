@@ -1,8 +1,8 @@
 import cron from "node-cron";
-import { pool } from "../db.js";
-import * as api from "../services/footballApi.js";
-import { sendKickoffReminder } from "../services/emailService.js";
-import { LEAGUE_CODES } from "../services/footballApi.js";
+import { pool } from "./db.js";
+import * as api from "./footballApi.js";
+import { sendKickoffReminder } from "./emailService.js";
+import { LEAGUE_CODES } from "./footballApi.js";
 
 const LEAGUE_IDS = Object.keys(LEAGUE_CODES);
 const LEAGUE_NAMES = {
