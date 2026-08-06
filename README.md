@@ -19,7 +19,7 @@
 ## ধাপ ১ — Neon Database
 
 Neon এ তো ডাটাবেজ আগেই বানানো আছে বলেছ। Neon dashboard থেকে:
-1. তোমার প্রজেক্টে যাও → **Connection string** কপি করো (এটা `postgresql://...` দিয়ে শুরু হবে)
+1. তোমার প্রজেক্টে যাও → **Connection string** কপি করো (এটা 'postgresql://neondb_owner:npg_XbTiGj1ItuC5@ep-lucky-flower-ay3e5mnw-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require' দিয়ে শুরু হবে)
 2. এটা backend এর env var `DATABASE_URL` এ বসবে (নিচে ধাপ ৩ এ)
 
 টেবিল বানানোর জন্য: backend ডিপ্লয় হওয়ার পর একবার `npm run migrate` চালাতে হবে (Render এ কীভাবে চালাবে সেটা ধাপ ৩ এ বলা আছে)। `backend/src/schema.sql` ফাইলে সব টেবিলের ডেফিনিশন আছে — চাইলে Neon এর SQL editor এ গিয়ে সরাসরি পুরো ফাইলের কনটেন্ট পেস্ট করেও রান করতে পারো, এটাই সবচেয়ে সহজ রাস্তা যদি `npm run migrate` নিয়ে ঝামেলা করতে না চাও।
