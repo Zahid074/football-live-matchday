@@ -84,4 +84,14 @@ router.get("/leagues/:leagueId/clubs", async (req, res) => {
   }
 });
 
+router.get("/leagues/:leagueId/season", async (req, res) => {
+  try {
+    const season = await api.getCurrentSeason(req.params.leagueId);
+    res.json(season || {});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load season" });
+  }
+});
+
 export default router;
