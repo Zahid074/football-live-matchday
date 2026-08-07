@@ -24,14 +24,21 @@ router.get("/me", requireAuth, async (req, res) => {
       [req.userId]
     );
     const { rows: favRows } = await pool.query(
-      `SELECT club_id, league_id FROM favorites WHERE user_id = $1`,
+      `SELECT f.club_id, f.league_id, c.name AS club_name
+       FROM favorites f
+       LEFT JOIN clubs_cache c ON c.club_id = f.club_id
+       WHERE f.user_id = $1`,
       [req.userId]
     );
     const { rows: notifyRows } = await pool.query(
       `SELECT club_id, enabled FROM notify_settings WHERE user_id = $1`,
       [req.userId]
     );
-    res.json({ user: userRows[0], favorites: favRows, notifySettings: notifyRows });
+    const { rows: matchNotifyRows } = await pool.query(
+      `SELECT match_id, enabled FROM match_notify_settings WHERE user_id = $1`,
+      [req.userId]
+    );
+    res.json({ user: userRows[0], favorites: favRows, notifySettings: notifyRows, matchNotifications: matchNotifyRows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load profile" });
