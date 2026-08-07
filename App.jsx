@@ -466,7 +466,7 @@ function FavMatchTicker({ P, accent, onClub, user }) {
           <div className="text-center text-[11px] mt-1" style={{ color: P.textDim }}>
             {m.status === "IN_PLAY" || m.status === "PAUSED"
               ? `LIVE${m.minute ? ` • ${m.minute}'` : ""}`
-              : `Kicks off ${new Date(m.kickoff_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}
+              : `Kicks off ${new Date(m.kickoff_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true })}`}
           </div>
           <div className="flex items-center justify-center gap-4 text-lg font-black mt-1">
             <span>{m.home_score ?? 0}</span>
