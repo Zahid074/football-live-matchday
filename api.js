@@ -41,4 +41,6 @@ export const api = {
   removeFavorite: (clubId) => request(`/favorites/${clubId}`, { method: "DELETE" }),
   setNotify: (clubId, enabled) => request("/notify-settings", { method: "POST", body: { clubId, enabled } }),
   setTheme: (theme) => request("/me/theme", { method: "PATCH", body: { theme } }),
+  setMatchNotify: (matchId, enabled) => request(`/matches/${matchId}/notify`, { method: "POST", body: { enabled } }),
+  getFavMatches: () => request("/me/favorites/matches"),
 };
