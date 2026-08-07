@@ -220,12 +220,14 @@ function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, fav
   const [results, setResults] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [clubs, setClubs] = useState([]);
+  const [season, setSeason] = useState(null);
 
   useEffect(() => {
     api.getTable(leagueId).then(setTable).catch(() => setTable([]));
     api.getResults(leagueId).then(setResults).catch(() => setResults([]));
     api.getFixtures(leagueId).then(setFixtures).catch(() => setFixtures([]));
     api.getClubs(leagueId).then(setClubs).catch(() => setClubs([]));
+    api.getSeason(leagueId).then(setSeason).catch(() => setSeason(null));
   }, [leagueId]);
 
   const favInLeague = favorites.filter((f) => f.league_id === leagueId);
@@ -235,10 +237,15 @@ function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, fav
       <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide mb-6" style={{ color: P.textDim }}>
         <ChevronLeft size={16} /> All Leagues
       </button>
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-1">
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: league.color }} />
         <h1 className="text-xl font-black uppercase tracking-tight">{league.name}</h1>
       </div>
+      {season?.label && (
+        <p className="text-xs font-semibold uppercase tracking-wide mb-6" style={{ color: P.textFaint }}>
+          Season {season.label}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-8">
         {MENU.map((m) => (
@@ -528,6 +535,11 @@ function ClubPage({ P, clubId, leagueColor, onBack }) {
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tight">{club.name}</h1>
           <p className="text-sm" style={{ color: P.textDim }}>Manager: {club.manager || "Unknown"}</p>
+          {club.season?.label && (
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: P.textFaint }}>
+              Squad — Season {club.season.label}
+            </p>
+          )}
         </div>
       </div>
 
