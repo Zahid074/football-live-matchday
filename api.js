@@ -43,4 +43,5 @@ export const api = {
   setTheme: (theme) => request("/me/theme", { method: "PATCH", body: { theme } }),
   setMatchNotify: (matchId, enabled) => request(`/matches/${matchId}/notify`, { method: "POST", body: { enabled } }),
   getFavMatches: () => request("/me/favorites/matches"),
+  getSeason: (leagueId) => request(`/leagues/${leagueId}/season`),
 };
