@@ -25,20 +25,24 @@ export default function App() {
   const [tab, setTab] = useState("overview");
 
   const [user, setUser] = useState(null);
-  const [favorites, setFavorites] = useState([]); // [{club_id, league_id}]
+  const [favorites, setFavorites] = useState([]); // [{club_id, league_id, club_name}]
   const [notifySettings, setNotifySettings] = useState({}); // {club_id: enabled}
+  const [matchNotifications, setMatchNotifications] = useState({}); // {match_id: enabled}
 
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch(() => setLeagues(Object.entries(LEAGUE_META).map(([id, m]) => ({ id, ...m }))));
   }, []);
 
   const refreshMe = useCallback(() => {
-    api.getMe().then(({ user, favorites, notifySettings }) => {
+    api.getMe().then(({ user, favorites, notifySettings, matchNotifications }) => {
       setUser(user);
       setFavorites(favorites);
       const map = {};
       notifySettings.forEach((n) => (map[n.club_id] = n.enabled));
       setNotifySettings(map);
+      const matchMap = {};
+      (matchNotifications || []).forEach((n) => (matchMap[n.match_id] = n.enabled));
+      setMatchNotifications(matchMap);
     }).catch(() => { setToken(null); setUser(null); });
   }, []);
 
@@ -57,6 +61,7 @@ export default function App() {
     setUser(null);
     setFavorites([]);
     setNotifySettings({});
+    setMatchNotifications({});
   };
 
   const isFavorite = (id) => favorites.some((f) => f.club_id === id);
@@ -75,6 +80,13 @@ export default function App() {
     const next = !(notifySettings[id] ?? true);
     await api.setNotify(id, next);
     setNotifySettings((p) => ({ ...p, [id]: next }));
+  };
+
+  const toggleMatchNotify = async (matchId) => {
+    if (!user) return alert("Sign in with Google to manage match notifications.");
+    const next = !(matchNotifications[matchId] ?? false);
+    await api.setMatchNotify(matchId, next);
+    setMatchNotifications((p) => ({ ...p, [matchId]: next }));
   };
 
   const openLeague = (id) => { setLeagueId(id); setTab("overview"); setView("league"); };
@@ -105,6 +117,8 @@ export default function App() {
           toggleFavorite={toggleFavorite}
           notifySettings={notifySettings}
           toggleNotify={toggleNotify}
+          matchNotifications={matchNotifications}
+          toggleMatchNotify={toggleMatchNotify}
           user={user}
         />
       )}
@@ -201,7 +215,7 @@ const MENU = [
   { id: "allClubs", label: "See All Clubs", icon: Users },
 ];
 
-function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, favorites, isFavorite, toggleFavorite, notifySettings, toggleNotify, user }) {
+function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, favorites, isFavorite, toggleFavorite, notifySettings, toggleNotify, matchNotifications, toggleMatchNotify, user }) {
   const [table, setTable] = useState([]);
   const [results, setResults] = useState([]);
   const [fixtures, setFixtures] = useState([]);
@@ -251,7 +265,9 @@ function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, fav
               )}
               {table.length > 0 && <Section P={P} title="Table" icon={Table2}><StandingsTable P={P} rows={table} clubs={clubs} onClub={onClub} accent={league.color} /></Section>}
               <Section P={P} title="This Season's Results" icon={Trophy}><MatchList P={P} matches={results} empty="No results yet." /></Section>
-              <Section P={P} title="Upcoming Fixtures" icon={Radio}><MatchList P={P} matches={fixtures} empty="No fixtures scheduled." /></Section>
+              <Section P={P} title="Upcoming Fixtures" icon={Radio}>
+                <MatchList P={P} matches={fixtures} empty="No fixtures scheduled." user={user} matchNotifications={matchNotifications} onToggleMatchNotify={toggleMatchNotify} />
+              </Section>
             </>
           )}
 
@@ -273,14 +289,21 @@ function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, fav
           )}
 
           {tab === "notify" && (
-            <NotifyPanel P={P} user={user} clubs={clubs.filter((c) => favInLeague.some((f) => f.club_id === c.club_id))}
-              notifySettings={notifySettings} toggleNotify={toggleNotify} accent={league.color} />
+            <>
+              <NotifyPanel P={P} user={user} clubs={clubs.filter((c) => favInLeague.some((f) => f.club_id === c.club_id))}
+                notifySettings={notifySettings} toggleNotify={toggleNotify} accent={league.color} />
+              <div className="mt-8">
+                <Section P={P} title="All Upcoming Fixtures — Per-Match Alerts" icon={Bell}>
+                  <MatchList P={P} matches={fixtures} empty="No fixtures scheduled." user={user} matchNotifications={matchNotifications} onToggleMatchNotify={toggleMatchNotify} />
+                </Section>
+              </div>
+            </>
           )}
 
           {tab === "allClubs" && <ClubGrid P={P} clubs={clubs} onClub={onClub} accent={league.color} />}
         </div>
 
-        <FavSidebar P={P} favorites={favorites} onClub={onClub} accent={league.color} />
+        <FavSidebar P={P} favorites={favorites} onClub={onClub} accent={league.color} user={user} />
       </div>
     </div>
   );
@@ -329,22 +352,33 @@ function StandingsTable({ P, rows, clubs, onClub, accent }) {
   );
 }
 
-function MatchList({ P, matches, empty }) {
+function MatchList({ P, matches, empty, user, matchNotifications, onToggleMatchNotify }) {
   if (!matches || matches.length === 0) return <p style={{ color: P.textFaint }} className="text-sm">{empty}</p>;
+  const isUpcoming = (m) => m.status === "SCHEDULED" || m.status === "TIMED";
   return (
     <div className="space-y-2">
-      {matches.map((m) => (
-        <div key={m.match_id} className="flex items-center justify-between rounded-xl px-4 py-3 text-sm"
-          style={{ background: P.panel, border: `1px solid ${P.border}` }}>
-          <span className="font-semibold">{m.home_club_name}</span>
-          <span className="font-black" style={{ color: m.status === "IN_PLAY" || m.status === "PAUSED" ? P.accent : P.textDim }}>
-            {m.status === "FINISHED" || m.status === "IN_PLAY" || m.status === "PAUSED"
-              ? `${m.home_score ?? 0} – ${m.away_score ?? 0}`
-              : new Date(m.kickoff_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-          </span>
-          <span className="font-semibold">{m.away_club_name}</span>
-        </div>
-      ))}
+      {matches.map((m) => {
+        const on = matchNotifications?.[m.match_id] ?? false;
+        return (
+          <div key={m.match_id} className="flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm"
+            style={{ background: P.panel, border: `1px solid ${P.border}` }}>
+            <span className="font-semibold flex-1">{m.home_club_name}</span>
+            <span className="font-black shrink-0" style={{ color: m.status === "IN_PLAY" || m.status === "PAUSED" ? P.accent : P.textDim }}>
+              {m.status === "FINISHED" || m.status === "IN_PLAY" || m.status === "PAUSED"
+                ? `${m.home_score ?? 0} – ${m.away_score ?? 0}`
+                : new Date(m.kickoff_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <span className="font-semibold flex-1 text-right">{m.away_club_name}</span>
+            {onToggleMatchNotify && isUpcoming(m) && (
+              <button onClick={() => onToggleMatchNotify(m.match_id)} className="p-1.5 rounded-full shrink-0"
+                style={{ border: `1px solid ${P.border}`, color: on ? "#C9FF3D" : P.textFaint }}
+                title={on ? "Notification on" : "Notification off"}>
+                <Bell size={14} fill={on ? "currentColor" : "none"} />
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -372,9 +406,10 @@ function FavouriteStatus({ P, favIds, table, clubs, onClub, accent }) {
   return <StandingsTable P={P} rows={favRows.length ? favRows : table.filter(r=>favIds.includes(r.club_id))} clubs={clubs} onClub={onClub} accent={accent} />;
 }
 
-function FavSidebar({ P, favorites, onClub, accent }) {
+function FavSidebar({ P, favorites, onClub, accent, user }) {
   return (
     <aside className="lg:sticky lg:top-6 h-fit">
+      <FavMatchTicker P={P} accent={accent} onClub={onClub} user={user} />
       <div className="rounded-2xl p-5" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
         <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase tracking-[0.2em]" style={{ color: P.textDim }}>
           <Star size={13} style={{ color: accent }} /> Favourites
@@ -388,13 +423,59 @@ function FavSidebar({ P, favorites, onClub, accent }) {
                 className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left"
                 style={{ border: `1px solid ${P.border}` }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: accent }}><User size={14} /></div>
-                <span className="text-sm font-semibold truncate">{f.club_id}</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{f.club_name || f.club_id}</div>
+                  <div className="text-[10px] uppercase tracking-wide truncate" style={{ color: P.textFaint }}>
+                    {LEAGUE_META[f.league_id]?.name || f.league_id}
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         )}
       </div>
     </aside>
+  );
+}
+
+// Shows favourite clubs' live matches, or ones kicking off within 30 minutes.
+// NOTE: only score + live status are available from the current data provider —
+// detailed stats (shots, possession, cards) would need a different/paid API.
+function FavMatchTicker({ P, accent, onClub, user }) {
+  const [matches, setMatches] = useState([]);
+
+  useEffect(() => {
+    if (!user) { setMatches([]); return; }
+    const load = () => api.getFavMatches().then(setMatches).catch(() => {});
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [user]);
+
+  if (!user || matches.length === 0) return null;
+
+  return (
+    <div className="space-y-2 mb-4">
+      {matches.map((m) => (
+        <div key={m.match_id} className="rounded-xl p-3" style={{ background: P.panel, border: `1px solid ${accent}` }}>
+          <div className="flex items-center justify-between text-sm font-semibold gap-2">
+            <button onClick={() => onClub(m.home_club_id)} className="hover:underline text-left truncate">{m.home_club_name}</button>
+            <span className="text-xs font-bold shrink-0" style={{ color: accent }}>vs</span>
+            <button onClick={() => onClub(m.away_club_id)} className="hover:underline text-right truncate">{m.away_club_name}</button>
+          </div>
+          <div className="text-center text-[11px] mt-1" style={{ color: P.textDim }}>
+            {m.status === "IN_PLAY" || m.status === "PAUSED"
+              ? `LIVE${m.minute ? ` • ${m.minute}'` : ""}`
+              : `Kicks off ${new Date(m.kickoff_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`}
+          </div>
+          <div className="flex items-center justify-center gap-4 text-lg font-black mt-1">
+            <span>{m.home_score ?? 0}</span>
+            <span style={{ color: P.textFaint }}>–</span>
+            <span>{m.away_score ?? 0}</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -482,7 +563,6 @@ function ClubPage({ P, clubId, leagueColor, onBack }) {
 
 function Pitch({ P, formation, accent }) {
   const lineup = formation.lineup || [];
-  // football-data.org gives position labels like Goalkeeper / Defence / Midfield / Offence — group into rows
   const rows = {
     Goalkeeper: lineup.filter((p) => /keeper/i.test(p.position)),
     Defence: lineup.filter((p) => /defen(c|s)e|back/i.test(p.position)),
