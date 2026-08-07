@@ -151,3 +151,27 @@ function mapMatch(leagueId) {
     } : null,
   });
 }
+
+// --- current season label, cached in memory for a few hours (rarely changes) ---
+const seasonCache = new Map(); // leagueId -> { season, fetchedAt }
+
+export async function getCurrentSeason(leagueId) {
+  const cached = seasonCache.get(leagueId);
+  if (cached && Date.now() - cached.fetchedAt < 6 * 60 * 60 * 1000) return cached.season;
+
+  const code = LEAGUE_CODES[leagueId];
+  if (!code) return null;
+
+  const data = await safeRequest(`/competitions/${code}`, null);
+  if (!data?.currentSeason?.startDate) return null;
+
+  const startYear = new Date(data.currentSeason.startDate).getFullYear();
+  const endYear = new Date(data.currentSeason.endDate).getFullYear();
+  const season = {
+    startYear,
+    endYear,
+    label: startYear === endYear ? `${startYear}` : `${startYear}-${String(endYear).slice(-2)}`,
+  };
+  seasonCache.set(leagueId, { season, fetchedAt: Date.now() });
+  return season;
+}
