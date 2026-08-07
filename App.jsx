@@ -366,7 +366,7 @@ function MatchList({ P, matches, empty, user, matchNotifications, onToggleMatchN
             <span className="font-black shrink-0" style={{ color: m.status === "IN_PLAY" || m.status === "PAUSED" ? P.accent : P.textDim }}>
               {m.status === "FINISHED" || m.status === "IN_PLAY" || m.status === "PAUSED"
                 ? `${m.home_score ?? 0} – ${m.away_score ?? 0}`
-                : new Date(m.kickoff_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                : new Date(m.kickoff_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
             </span>
             <span className="font-semibold flex-1 text-right">{m.away_club_name}</span>
             {onToggleMatchNotify && isUpcoming(m) && (
