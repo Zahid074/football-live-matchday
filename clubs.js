@@ -9,9 +9,14 @@ router.get("/clubs/:clubId", async (req, res) => {
   const { clubId } = req.params;
   try {
     const { rows } = await pool.query(`SELECT * FROM clubs_cache WHERE club_id = $1`, [clubId]);
-    if (rows.length > 0 && rows[0].squad) return res.json(rows[0]);
+    const leagueId = rows[0]?.league_id || null;
+    const season = leagueId ? await api.getCurrentSeason(leagueId) : null;
 
-    // not cached yet — fetch live and cache it
+    if (rows.length > 0 && rows[0].squad && rows[0].squad.length > 0) {
+      return res.json({ ...rows[0], season });
+    }
+
+    // not cached yet, or cached with empty squad — fetch live and cache it
     const live = await api.getTeamDetail(clubId);
     if (!live) return res.status(404).json({ error: "Club not found" });
 
@@ -21,9 +26,9 @@ router.get("/clubs/:clubId", async (req, res) => {
        ON CONFLICT (club_id) DO UPDATE SET
          name = EXCLUDED.name, crest = EXCLUDED.crest, manager = EXCLUDED.manager,
          squad = EXCLUDED.squad, updated_at = now()`,
-      [live.club_id, rows[0]?.league_id || null, live.name, live.crest, live.manager, JSON.stringify(live.squad)]
+      [live.club_id, leagueId, live.name, live.crest, live.manager, JSON.stringify(live.squad)]
     );
-    res.json(live);
+    res.json({ ...live, season });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load club" });
