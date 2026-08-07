@@ -133,10 +133,15 @@ async function sendKickoffReminders() {
     const { rows: interestedUsers } = await pool.query(
       `SELECT DISTINCT u.id, u.email, u.name
        FROM users u
-       JOIN favorites f ON f.user_id = u.id
-       JOIN notify_settings ns ON ns.user_id = u.id AND ns.club_id = f.club_id
-       WHERE ns.enabled = true AND f.club_id IN ($1, $2)`,
-      [match.home_club_id, match.away_club_id]
+       WHERE u.id IN (
+         SELECT f.user_id FROM favorites f
+         JOIN notify_settings ns ON ns.user_id = f.user_id AND ns.club_id = f.club_id
+         WHERE ns.enabled = true AND f.club_id IN ($1, $2)
+         UNION
+         SELECT mns.user_id FROM match_notify_settings mns
+         WHERE mns.match_id = $3 AND mns.enabled = true
+       )`,
+      [match.home_club_id, match.away_club_id, match.match_id]
     );
 
     for (const user of interestedUsers) {
