@@ -397,6 +397,7 @@ function Section({ P, title, icon: Icon, children }) {
 
 function StandingsTable({ P, rows, clubs, onClub, accent }) {
   const clubFor = (id) => clubs.find((c) => c.club_id === id) || rows.find((r) => r.club_id === id) || {};
+  const nameOf = (club, id) => club.name || `Club #${id}`;
   if (rows.length === 0) return <p style={{ color: P.textFaint }} className="text-sm">No table data available.</p>;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
@@ -420,7 +421,7 @@ function StandingsTable({ P, rows, clubs, onClub, accent }) {
                 <td className="py-3 px-4 font-semibold">
                   <div className="flex items-center gap-2">
                     <ClubCrest src={club.crest} alt={club.name} size={20} accent={accent} P={P} />
-                    <span>{club.name || r.club_id}</span>
+                    <span>{nameOf(club, r.club_id)}</span>
                   </div>
                 </td>
                 <td className="py-3 px-4 text-center" style={{ color: P.textDim }}>{r.played}</td>
