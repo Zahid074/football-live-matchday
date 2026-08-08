@@ -24,7 +24,7 @@ router.get("/me", requireAuth, async (req, res) => {
       [req.userId]
     );
     const { rows: favRows } = await pool.query(
-      `SELECT f.club_id, f.league_id, c.name AS club_name
+      `SELECT f.club_id, f.league_id, c.name AS club_name, c.crest AS crest
        FROM favorites f
        LEFT JOIN clubs_cache c ON c.club_id = f.club_id
        WHERE f.user_id = $1`,
