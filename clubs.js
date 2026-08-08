@@ -35,6 +35,47 @@ router.get("/clubs/:clubId", async (req, res) => {
   }
 });
 
+// Player profile — the club's cached squad already carries name, position,
+// nationality, DOB and shirt number (that's all football-data.org's free
+// tier gives us; no per-match goals/assists on this plan). We look the
+// player up there first so the page loads instantly, then try a live
+// /persons/{id} call for a couple of extra bio fields (birthplace etc.) —
+// but never fail the request just because that enrichment call fails.
+router.get("/clubs/:clubId/players/:playerId", async (req, res) => {
+  const { clubId, playerId } = req.params;
+  try {
+    const { rows } = await pool.query(`SELECT * FROM clubs_cache WHERE club_id = $1`, [clubId]);
+    let club = rows[0];
+
+    if (!club || !club.squad || club.squad.length === 0) {
+      const live = await api.getTeamDetail(clubId);
+      if (live) club = { ...club, ...live };
+    }
+    if (!club) return res.status(404).json({ error: "Club not found" });
+
+    const player = (club.squad || []).find(
+      (p) => String(p.provider_player_id) === String(playerId)
+    );
+    if (!player) return res.status(404).json({ error: "Player not found in this club's squad" });
+
+    const bio = await api.getPlayerDetail(playerId).catch(() => null);
+
+    res.json({
+      ...player,
+      club_id: club.club_id,
+      club_name: club.name,
+      club_crest: club.crest,
+      placeOfBirth: bio?.placeOfBirth || null,
+      countryOfBirth: bio?.countryOfBirth || null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load player" });
+  }
+});
+
+// Formation — only returns data once the provider has released the lineup,
+
 // Formation — only returns data once the provider has released the lineup,
 // which per the spec means roughly 20-30 min before kickoff. If nothing is
 // released yet we return { available: false } so the frontend can show a
