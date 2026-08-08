@@ -22,10 +22,39 @@ router.get("/leagues/:leagueId/table", async (req, res) => {
   const { leagueId } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT club_id, position, played, won, draw, lost, points, goal_diff
-       FROM standings_cache WHERE league_id = $1 ORDER BY position ASC`,
+      `SELECT s.club_id, s.position, s.played, s.won, s.draw, s.lost, s.points, s.goal_diff,
+              c.name, c.crest
+       FROM standings_cache s
+       LEFT JOIN clubs_cache c ON c.club_id = s.club_id
+       WHERE s.league_id = $1 ORDER BY s.position ASC`,
       [leagueId]
     );
+
+    // Self-heal: a handful of clubs sometimes never made it into clubs_cache
+    // (daily squad sync hit a rate limit, newly promoted team, etc). Backfill
+    // just those from the live standings response — it always carries the
+    // team name + crest — so both this request and future ones are fixed.
+    const missing = rows.filter((r) => !r.name);
+    if (missing.length > 0) {
+      const live = await api.getStandings(leagueId);
+      if (live) {
+        const byId = new Map(live.map((l) => [l.club_id, l]));
+        for (const row of missing) {
+          const found = byId.get(row.club_id);
+          if (!found) continue;
+          row.name = found.name;
+          row.crest = found.crest;
+          await pool.query(
+            `INSERT INTO clubs_cache (club_id, league_id, name, crest, updated_at)
+             VALUES ($1, $2, $3, $4, now())
+             ON CONFLICT (club_id) DO UPDATE SET
+               name = EXCLUDED.name, crest = EXCLUDED.crest, updated_at = now()`,
+            [row.club_id, leagueId, found.name, found.crest]
+          );
+        }
+      }
+    }
+
     if (rows.length > 0) return res.json(rows);
 
     const live = await api.getStandings(leagueId);
