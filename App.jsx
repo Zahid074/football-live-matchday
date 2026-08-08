@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { GoogleLogin } from "@react-oauth/google";
 import {
   Trophy, Star, Bell, Users, Table2, ChevronLeft, Mail, Check,
-  Shirt, User, Radio, Sun, Moon, LogOut,
+  Radio, Sun, Moon, LogOut, Search, Shield,
 } from "lucide-react";
 import { useTheme } from "./ThemeContext.jsx";
 import { api, setToken } from "./api.js";
@@ -16,13 +16,66 @@ const LEAGUE_META = {
   mls: { name: "MLS", country: "USA/Canada", color: "#A5122A" },
 };
 
+// --- URL <-> route mapping -------------------------------------------------
+// We keep real browser history entries for every screen (home / league /
+// club / player) instead of only flipping React state. That's what makes
+// the phone/browser back button step *inside* the app one screen at a time
+// instead of leaving it immediately — no cookies needed for this, it's a
+// History API concern, not a storage one.
+function routeFromLocation() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  const tab = new URLSearchParams(window.location.search).get("tab") || "overview";
+  if (parts[0] === "leagues" && parts[1]) return { view: "league", leagueId: parts[1], tab };
+  if (parts[0] === "clubs" && parts[1] && parts[2] === "players" && parts[3]) {
+    return { view: "player", clubId: parts[1], playerId: parts[3] };
+  }
+  if (parts[0] === "clubs" && parts[1]) return { view: "club", clubId: parts[1] };
+  return { view: "home" };
+}
+
+function pathFromRoute(r) {
+  if (r.view === "league") return `/leagues/${r.leagueId}${r.tab && r.tab !== "overview" ? `?tab=${r.tab}` : ""}`;
+  if (r.view === "club") return `/clubs/${r.clubId}`;
+  if (r.view === "player") return `/clubs/${r.clubId}/players/${r.playerId}`;
+  return "/";
+}
+
 export default function App() {
   const { palette: P, mode, toggle } = useTheme();
   const [leagues, setLeagues] = useState([]);
-  const [view, setView] = useState("home"); // home | league | club
+  const [view, setView] = useState("home"); // home | league | club | player
   const [leagueId, setLeagueId] = useState(null);
   const [clubId, setClubId] = useState(null);
+  const [playerId, setPlayerId] = useState(null);
   const [tab, setTab] = useState("overview");
+
+  // Apply a route object to React state (used for both pushState navigation
+  // and popstate/back-forward events).
+  const applyRoute = useCallback((r) => {
+    setView(r.view);
+    setLeagueId(r.leagueId || null);
+    setClubId(r.clubId || null);
+    setPlayerId(r.playerId || null);
+    setTab(r.tab || "overview");
+  }, []);
+
+  // Push a new route: adds a real history entry + updates the address bar.
+  const navigate = useCallback((r) => {
+    window.history.pushState(r, "", pathFromRoute(r));
+    applyRoute(r);
+  }, [applyRoute]);
+
+  useEffect(() => {
+    // On first load, normalise whatever URL we landed on into a route and
+    // replace (not push) the current entry so back/forward stays sane.
+    const initial = routeFromLocation();
+    window.history.replaceState(initial, "", pathFromRoute(initial));
+    applyRoute(initial);
+
+    const onPopState = (e) => applyRoute(e.state || routeFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyRoute]);
 
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]); // [{club_id, league_id, club_name}]
@@ -89,9 +142,12 @@ export default function App() {
     setMatchNotifications((p) => ({ ...p, [matchId]: next }));
   };
 
-  const openLeague = (id) => { setLeagueId(id); setTab("overview"); setView("league"); };
-  const openClub = (id) => { setClubId(id); setView("club"); };
-  const goHome = () => { setView("home"); setLeagueId(null); };
+  const openLeague = (id) => navigate({ view: "league", leagueId: id, tab: "overview" });
+  const openClub = (id) => navigate({ view: "club", clubId: id });
+  const openPlayer = (cId, pId) => navigate({ view: "player", clubId: cId, playerId: pId });
+  const changeTab = (id) => navigate({ view: "league", leagueId, tab: id });
+  const goHome = () => navigate({ view: "home" });
+  const goBack = () => window.history.back();
 
   const wrapStyle = { background: P.bg, color: P.text, minHeight: "100vh" };
 
@@ -109,8 +165,8 @@ export default function App() {
           P={P}
           leagueId={leagueId}
           league={LEAGUE_META[leagueId] || { name: leagueId, color: P.accent }}
-          tab={tab} setTab={setTab}
-          onBack={goHome}
+          tab={tab} setTab={changeTab}
+          onBack={goBack}
           onClub={openClub}
           favorites={favorites}
           isFavorite={isFavorite}
@@ -128,7 +184,19 @@ export default function App() {
           P={P}
           clubId={clubId}
           leagueColor={leagueId ? (LEAGUE_META[leagueId]?.color || P.accent) : P.accent}
-          onBack={() => setView(leagueId ? "league" : "home")}
+          onBack={goBack}
+          onPlayer={(pId) => openPlayer(clubId, pId)}
+        />
+      )}
+
+      {view === "player" && clubId && playerId && (
+        <PlayerPage
+          P={P}
+          clubId={clubId}
+          playerId={playerId}
+          accent={leagueId ? (LEAGUE_META[leagueId]?.color || P.accent) : P.accent}
+          onBack={goBack}
+          onClub={openClub}
         />
       )}
     </div>
@@ -328,7 +396,7 @@ function Section({ P, title, icon: Icon, children }) {
 }
 
 function StandingsTable({ P, rows, clubs, onClub, accent }) {
-  const nameFor = (id) => clubs.find((c) => c.club_id === id)?.name || rows.find(r=>r.club_id===id)?.name || id;
+  const clubFor = (id) => clubs.find((c) => c.club_id === id) || rows.find((r) => r.club_id === id) || {};
   if (rows.length === 0) return <p style={{ color: P.textFaint }} className="text-sm">No table data available.</p>;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
@@ -343,16 +411,24 @@ function StandingsTable({ P, rows, clubs, onClub, accent }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.club_id} onClick={() => onClub(r.club_id)} className="cursor-pointer hover:opacity-80"
-              style={{ borderBottom: i < rows.length - 1 ? `1px solid ${P.border}` : "none" }}>
-              <td className="py-3 px-4 font-bold" style={{ color: i < 4 ? accent : P.textDim }}>{r.position}</td>
-              <td className="py-3 px-4 font-semibold">{nameFor(r.club_id)}</td>
-              <td className="py-3 px-4 text-center" style={{ color: P.textDim }}>{r.played}</td>
-              <td className="py-3 px-4 text-center" style={{ color: P.textDim }}>{r.goal_diff > 0 ? "+" : ""}{r.goal_diff}</td>
-              <td className="py-3 px-4 text-center font-black">{r.points}</td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const club = clubFor(r.club_id);
+            return (
+              <tr key={r.club_id} onClick={() => onClub(r.club_id)} className="cursor-pointer hover:opacity-80"
+                style={{ borderBottom: i < rows.length - 1 ? `1px solid ${P.border}` : "none" }}>
+                <td className="py-3 px-4 font-bold" style={{ color: i < 4 ? accent : P.textDim }}>{r.position}</td>
+                <td className="py-3 px-4 font-semibold">
+                  <div className="flex items-center gap-2">
+                    <ClubCrest src={club.crest} alt={club.name} size={20} accent={accent} P={P} />
+                    <span>{club.name || r.club_id}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-4 text-center" style={{ color: P.textDim }}>{r.played}</td>
+                <td className="py-3 px-4 text-center" style={{ color: P.textDim }}>{r.goal_diff > 0 ? "+" : ""}{r.goal_diff}</td>
+                <td className="py-3 px-4 text-center font-black">{r.points}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -397,7 +473,7 @@ function ClubGrid({ P, clubs, onClub, accent, action }) {
       {clubs.map((c) => (
         <div key={c.club_id} className="rounded-xl p-4 flex flex-col items-start gap-3" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
           <button onClick={() => onClub(c.club_id)} className="flex items-center gap-2 text-left">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: accent }}><User size={14} /></div>
+            <ClubCrest src={c.crest} alt={c.name} size={32} accent={accent} P={P} />
             <span className="text-sm font-semibold">{c.name}</span>
           </button>
           {action && action(c)}
@@ -429,7 +505,7 @@ function FavSidebar({ P, favorites, onClub, accent, user }) {
               <button key={f.club_id} onClick={() => onClub(f.club_id)}
                 className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left"
                 style={{ border: `1px solid ${P.border}` }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: accent }}><User size={14} /></div>
+                <ClubCrest src={f.crest} alt={f.club_name} size={32} accent={accent} P={P} />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold truncate">{f.club_name || f.club_id}</div>
                   <div className="text-[10px] uppercase tracking-wide truncate" style={{ color: P.textFaint }}>
@@ -513,11 +589,12 @@ function NotifyPanel({ P, user, clubs, notifySettings, toggleNotify, accent }) {
 
 /* --------------------------------- club page ------------------------------- */
 
-function ClubPage({ P, clubId, leagueColor, onBack }) {
+function ClubPage({ P, clubId, leagueColor, onBack, onPlayer }) {
   const [club, setClub] = useState(null);
   const [formation, setFormation] = useState(null);
 
   useEffect(() => {
+    setClub(null);
     api.getClub(clubId).then(setClub).catch(() => setClub(null));
     api.getFormation(clubId).then(setFormation).catch(() => setFormation(null));
   }, [clubId]);
@@ -531,7 +608,7 @@ function ClubPage({ P, clubId, leagueColor, onBack }) {
       </button>
 
       <div className="flex items-center gap-3 mb-1">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: leagueColor }}><Shirt size={20} /></div>
+        <ClubCrest src={club.crest} alt={club.name} size={48} accent={leagueColor} P={P} />
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tight">{club.name}</h1>
           <p className="text-sm" style={{ color: P.textDim }}>Manager: {club.manager || "Unknown"}</p>
@@ -544,20 +621,7 @@ function ClubPage({ P, clubId, leagueColor, onBack }) {
       </div>
 
       <Section P={P} title="Full Squad" icon={Users}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {(club.squad || []).map((p) => (
-            <div key={p.provider_player_id} className="rounded-xl px-4 py-3" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-sm">{p.name}</span>
-                {p.shirtNumber && <span className="text-xs font-black" style={{ color: leagueColor }}>#{p.shirtNumber}</span>}
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs" style={{ color: P.textFaint }}>{p.position}</span>
-                <span className="text-xs" style={{ color: P.textFaint }}>{p.nationality}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <SquadList P={P} squad={club.squad || []} accent={leagueColor} onPlayer={onPlayer} />
       </Section>
 
       <Section P={P} title="Predicted Formation" icon={Trophy}>
@@ -613,6 +677,192 @@ function Pitch({ P, formation, accent }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------ club crest -------------------------------- */
+// football-data.org gives us a real crest URL per club (already returned by
+// the backend as `crest`); we just weren't rendering it anywhere. Falls back
+// to a plain badge icon if the image is missing or fails to load.
+function ClubCrest({ src, alt, size = 32, accent, P }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="rounded-full flex items-center justify-center shrink-0" style={{ width: size, height: size, background: accent }}>
+        <Shield size={Math.round(size * 0.5)} color="#fff" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt || "club crest"}
+      onError={() => setFailed(true)}
+      className="rounded-full object-contain shrink-0"
+      style={{ width: size, height: size, background: "#fff", padding: Math.max(2, size * 0.08), border: `1px solid ${P?.border || "rgba(0,0,0,0.1)"}` }}
+    />
+  );
+}
+
+/* ------------------------------ player avatar ------------------------------ */
+// The free football-data.org plan doesn't expose player photos at all, so
+// this generates a consistent initials avatar per player instead of a blank
+// silhouette — clearly a placeholder, not pretending to be a real photo.
+function PlayerAvatar({ name, size = 40 }) {
+  const url = `https://ui-avatars.com/api/?background=random&color=fff&bold=true&size=128&name=${encodeURIComponent(name || "?")}`;
+  return (
+    <img
+      src={url}
+      alt={name || "player"}
+      className="rounded-full object-cover shrink-0"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
+/* -------------------------------- squad list -------------------------------- */
+
+function SquadList({ P, squad, accent, onPlayer }) {
+  const [query, setQuery] = useState("");
+  const [posFilter, setPosFilter] = useState("all");
+
+  const positions = ["all", ...Array.from(new Set(squad.map((p) => p.position).filter(Boolean)))];
+
+  const filtered = squad.filter((p) => {
+    const matchesQuery = (p.name || "").toLowerCase().includes(query.trim().toLowerCase());
+    const matchesPos = posFilter === "all" || p.position === posFilter;
+    return matchesQuery && matchesPos;
+  });
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: P.textFaint }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search a player…"
+            className="w-full pl-9 pr-3 py-2 rounded-xl text-sm outline-none"
+            style={{ background: P.panel, border: `1px solid ${P.border}`, color: P.text }}
+          />
+        </div>
+        {positions.length > 1 && (
+          <select
+            value={posFilter}
+            onChange={(e) => setPosFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl text-sm outline-none"
+            style={{ background: P.panel, border: `1px solid ${P.border}`, color: P.text }}
+          >
+            {positions.map((pos) => (
+              <option key={pos} value={pos}>{pos === "all" ? "All positions" : pos}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm" style={{ color: P.textFaint }}>No players match that search.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {filtered.map((p) => (
+            <button
+              key={p.provider_player_id}
+              onClick={() => onPlayer(p.provider_player_id)}
+              className="rounded-xl px-4 py-3 flex items-center gap-3 text-left hover:-translate-y-0.5 transition-transform"
+              style={{ background: P.panel, border: `1px solid ${P.border}` }}
+            >
+              <PlayerAvatar name={p.name} size={36} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm truncate">{p.name}</span>
+                  {p.shirtNumber && <span className="text-xs font-black shrink-0" style={{ color: accent }}>#{p.shirtNumber}</span>}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs" style={{ color: P.textFaint }}>{p.position}</span>
+                  <span className="text-xs" style={{ color: P.textFaint }}>{p.nationality}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------- player page -------------------------------- */
+
+function PlayerPage({ P, clubId, playerId, accent, onBack, onClub }) {
+  const [player, setPlayer] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setPlayer(null);
+    setError(false);
+    api.getPlayer(clubId, playerId).then(setPlayer).catch(() => setError(true));
+  }, [clubId, playerId]);
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-10">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide mb-6" style={{ color: P.textDim }}>
+          <ChevronLeft size={16} /> Back
+        </button>
+        <p className="text-sm" style={{ color: P.textFaint }}>Couldn't load this player's profile.</p>
+      </div>
+    );
+  }
+
+  if (!player) return <div className="max-w-2xl mx-auto px-6 py-10" style={{ color: P.textDim }}>Loading player…</div>;
+
+  const age = player.dateOfBirth
+    ? Math.floor((Date.now() - new Date(player.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
+    : null;
+
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide mb-6" style={{ color: P.textDim }}>
+        <ChevronLeft size={16} /> Back to squad
+      </button>
+
+      <div className="flex items-center gap-4 mb-8">
+        <PlayerAvatar name={player.name} size={72} />
+        <div>
+          <h1 className="text-2xl font-black tracking-tight">{player.name}</h1>
+          {player.club_name && (
+            <button onClick={() => onClub(player.club_id)} className="flex items-center gap-2 mt-1 hover:underline">
+              <ClubCrest src={player.club_crest} alt={player.club_name} size={18} accent={accent} P={P} />
+              <span className="text-xs font-semibold" style={{ color: P.textDim }}>{player.club_name}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+        <Stat P={P} label="Position" value={player.position || "—"} />
+        <Stat P={P} label="Shirt No." value={player.shirtNumber ? `#${player.shirtNumber}` : "—"} />
+        <Stat P={P} label="Nationality" value={player.nationality || "—"} />
+        <Stat P={P} label="Date of Birth" value={player.dateOfBirth ? new Date(player.dateOfBirth).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"} />
+        <Stat P={P} label="Age" value={age !== null ? String(age) : "—"} />
+        <Stat P={P} label="Birthplace" value={player.placeOfBirth || player.countryOfBirth || "—"} />
+      </div>
+
+      <p className="text-xs leading-relaxed" style={{ color: P.textFaint }}>
+        Match-by-match stats (goals, assists, appearances) aren't available on the current data plan —
+        this page shows everything the provider exposes for free-tier squads. The photo above is a
+        generated initials avatar, since the API doesn't provide real player photos.
+      </p>
+    </div>
+  );
+}
+
+function Stat({ P, label, value }) {
+  return (
+    <div className="rounded-xl px-4 py-3" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
+      <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: P.textFaint }}>{label}</div>
+      <div className="text-sm font-bold truncate">{value}</div>
     </div>
   );
 }
