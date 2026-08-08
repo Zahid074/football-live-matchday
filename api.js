@@ -33,6 +33,7 @@ export const api = {
   getClubs: (leagueId) => request(`/leagues/${leagueId}/clubs`),
   getClub: (clubId) => request(`/clubs/${clubId}`),
   getFormation: (clubId) => request(`/clubs/${clubId}/formation`),
+  getPlayer: (clubId, playerId) => request(`/clubs/${clubId}/players/${playerId}`),
   getLiveMatches: () => request("/matches/live"),
 
   loginWithGoogle: (idToken) => request("/auth/google", { method: "POST", body: { idToken } }),
