@@ -110,6 +110,25 @@ export async function getTeamDetail(teamId) {
   };
 }
 
+// Best-effort player bio lookup. Free-tier /persons/{id} only exposes basic
+// biographical fields (no goals/assists/appearance stats) — callers should
+// treat this as an enrichment on top of the squad data we already cache,
+// not the primary source, and must tolerate it returning null.
+export async function getPlayerDetail(personId) {
+  const data = await safeRequest(`/persons/${personId}`, null);
+  if (!data) return null;
+  return {
+    id: String(data.id),
+    name: data.name,
+    position: data.position || null,
+    dateOfBirth: data.dateOfBirth || null,
+    nationality: data.nationality || null,
+    countryOfBirth: data.countryOfBirth || null,
+    placeOfBirth: data.placeOfBirth || null,
+    shirtNumber: data.shirtNumber || null,
+  };
+}
+
 export async function getMatches(leagueId, { status, dateFrom, dateTo } = {}) {
   const code = LEAGUE_CODES[leagueId];
   if (!code) return [];
