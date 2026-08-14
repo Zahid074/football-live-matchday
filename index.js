@@ -1,7 +1,11 @@
 import cron from "node-cron";
 import { pool } from "./db.js";
 import * as api from "./footballApi.js";
-import { sendKickoffReminder } from "./emailService.js";
+import {
+  sendMatch24hReminder,
+  sendMatch2hReminder,
+  sendLineupAnnouncement,
+} from "./emailService.js";
 import { LEAGUE_CODES } from "./footballApi.js";
 
 const LEAGUE_IDS = Object.keys(LEAGUE_CODES);
@@ -119,14 +123,20 @@ async function pollUpcomingLineups() {
 }
 
 // ---------------------------------------------------------------------------
-// 5) sendKickoffReminders — every 5 min. Emails users whose favourite club
-//    plays in ~20-30 min, once per match (tracked via notified_matches).
+// 5) Staged reminder emails. Same match can now email a follower up to 3
+//    times — once per "stage" — because notified_matches is now keyed on
+//    (user_id, match_id, stage) instead of just (user_id, match_id).
 // ---------------------------------------------------------------------------
-async function sendKickoffReminders() {
+
+// Shared plumbing: find matches inside a kickoff time window, find the users
+// who follow that club/match, skip anyone already emailed for this stage,
+// send, then record it.
+async function runStagedReminder({ stage, windowSql, windowParams = [], buildAndSend }) {
   const { rows: upcoming } = await pool.query(
     `SELECT * FROM matches_cache
      WHERE status IN ('SCHEDULED','TIMED')
-       AND kickoff_at BETWEEN now() + interval '20 minutes' AND now() + interval '30 minutes'`
+       AND ${windowSql}`,
+    windowParams
   );
 
   for (const match of upcoming) {
@@ -146,29 +156,77 @@ async function sendKickoffReminders() {
 
     for (const user of interestedUsers) {
       const { rows: already } = await pool.query(
-        `SELECT 1 FROM notified_matches WHERE user_id = $1 AND match_id = $2`,
-        [user.id, match.match_id]
+        `SELECT 1 FROM notified_matches WHERE user_id = $1 AND match_id = $2 AND stage = $3`,
+        [user.id, match.match_id, stage]
       );
       if (already.length > 0) continue;
 
       try {
-        await sendKickoffReminder({
-          to: user.email,
-          name: user.name,
-          homeTeam: match.home_club_name,
-          awayTeam: match.away_club_name,
-          kickoffAt: match.kickoff_at,
-          leagueName: LEAGUE_NAMES[match.league_id] || match.league_id,
-        });
+        await buildAndSend(match, user);
         await pool.query(
-          `INSERT INTO notified_matches (user_id, match_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [user.id, match.match_id]
+          `INSERT INTO notified_matches (user_id, match_id, stage) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [user.id, match.match_id, stage]
         );
       } catch (err) {
-        console.warn(`[sendKickoffReminders] email to ${user.email} failed:`, err.message);
+        console.warn(`[${stage}] email to ${user.email} failed:`, err.message);
       }
     }
   }
+}
+
+// 5a) ~24 hours before kickoff. Cron runs every 5 min, window is 5 min wide
+//     so every match is caught exactly once.
+async function send24hReminders() {
+  await runStagedReminder({
+    stage: "24h",
+    windowSql: `kickoff_at BETWEEN now() + interval '23 hours 55 minutes' AND now() + interval '24 hours'`,
+    buildAndSend: (match, user) =>
+      sendMatch24hReminder({
+        to: user.email,
+        name: user.name,
+        homeTeam: match.home_club_name,
+        awayTeam: match.away_club_name,
+        kickoffAt: match.kickoff_at,
+        leagueName: LEAGUE_NAMES[match.league_id] || match.league_id,
+      }),
+  });
+}
+
+// 5b) ~2 hours before kickoff, same day.
+async function send2hReminders() {
+  await runStagedReminder({
+    stage: "2h",
+    windowSql: `kickoff_at BETWEEN now() + interval '1 hour 55 minutes' AND now() + interval '2 hours'`,
+    buildAndSend: (match, user) =>
+      sendMatch2hReminder({
+        to: user.email,
+        name: user.name,
+        homeTeam: match.home_club_name,
+        awayTeam: match.away_club_name,
+        kickoffAt: match.kickoff_at,
+        leagueName: LEAGUE_NAMES[match.league_id] || match.league_id,
+      }),
+  });
+}
+
+// 5c) As soon as the starting lineup shows up (populated by pollUpcomingLineups
+//     just before this runs in the same cron tick). Not time-based — it fires
+//     the first time `lineup` is non-null for a not-yet-kicked-off match.
+async function sendLineupAnnouncements() {
+  await runStagedReminder({
+    stage: "lineup",
+    windowSql: `kickoff_at BETWEEN now() AND now() + interval '45 minutes' AND lineup IS NOT NULL`,
+    buildAndSend: (match, user) =>
+      sendLineupAnnouncement({
+        to: user.email,
+        name: user.name,
+        homeTeam: match.home_club_name,
+        awayTeam: match.away_club_name,
+        kickoffAt: match.kickoff_at,
+        leagueName: LEAGUE_NAMES[match.league_id] || match.league_id,
+        lineup: match.lineup,
+      }),
+  });
 }
 
 async function upsertMatch(m) {
@@ -187,12 +245,20 @@ async function upsertMatch(m) {
   );
 }
 
+// Run the lineup poll first, THEN check for newly-available lineups to email,
+// so sendLineupAnnouncements always sees the freshest data in the same tick.
+async function pollLineupsAndNotify() {
+  await pollUpcomingLineups();
+  await sendLineupAnnouncements();
+}
+
 export function startCronJobs() {
-  cron.schedule("0 4 * * *", syncSquads);           // once a day, 4am server time
-  cron.schedule("*/30 * * * *", syncFixturesResults); // every 30 min
-  cron.schedule("*/1 * * * *", pollLiveMatches);      // every 60s
-  cron.schedule("*/5 * * * *", pollUpcomingLineups);  // every 5 min
-  cron.schedule("*/5 * * * *", sendKickoffReminders); // every 5 min
+  cron.schedule("0 4 * * *", syncSquads);              // once a day, 4am server time
+  cron.schedule("*/30 * * * *", syncFixturesResults);  // every 30 min
+  cron.schedule("*/1 * * * *", pollLiveMatches);       // every 60s
+  cron.schedule("*/5 * * * *", pollLineupsAndNotify);  // every 5 min
+  cron.schedule("*/5 * * * *", send24hReminders);      // every 5 min
+  cron.schedule("*/5 * * * *", send2hReminders);       // every 5 min
 
   console.log("⏰ Cron jobs scheduled.");
 
