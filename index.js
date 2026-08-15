@@ -174,12 +174,16 @@ async function runStagedReminder({ stage, windowSql, windowParams = [], buildAnd
   }
 }
 
-// 5a) ~24 hours before kickoff. Cron runs every 5 min, window is 5 min wide
-//     so every match is caught exactly once.
+// 5a) Anywhere from now up to 24h before kickoff. Window is intentionally
+//     WIDE (not a narrow trailing slice) because runStagedReminder already
+//     de-dupes via notified_matches (user_id, match_id, stage). This makes
+//     the job self-healing: if the server was asleep/down/restarting during
+//     a match's original 24h mark, it still catches and sends on the next
+//     tick after it wakes up, instead of permanently missing that match.
 async function send24hReminders() {
   await runStagedReminder({
     stage: "24h",
-    windowSql: `kickoff_at BETWEEN now() + interval '23 hours 55 minutes' AND now() + interval '24 hours'`,
+    windowSql: `kickoff_at BETWEEN now() AND now() + interval '24 hours'`,
     buildAndSend: (match, user) =>
       sendMatch24hReminder({
         to: user.email,
@@ -192,11 +196,12 @@ async function send24hReminders() {
   });
 }
 
-// 5b) ~2 hours before kickoff, same day.
+// 5b) Anywhere from now up to 2h before kickoff, same day. Same self-healing
+//     reasoning as send24hReminders above.
 async function send2hReminders() {
   await runStagedReminder({
     stage: "2h",
-    windowSql: `kickoff_at BETWEEN now() + interval '1 hour 55 minutes' AND now() + interval '2 hours'`,
+    windowSql: `kickoff_at BETWEEN now() AND now() + interval '2 hours'`,
     buildAndSend: (match, user) =>
       sendMatch2hReminder({
         to: user.email,
