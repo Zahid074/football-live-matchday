@@ -1,0 +1,3 @@
+{
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"backend\" ]; then echo \"Skipping Vercel build: backend branch is deployed on Render, not Vercel.\" && exit 0; else exit 1; fi"
+}
