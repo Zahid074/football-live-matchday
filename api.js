@@ -29,6 +29,7 @@ export const api = {
   getLeagues: () => request("/leagues"),
   getTable: (leagueId) => request(`/leagues/${leagueId}/table`),
   getResults: (leagueId) => request(`/leagues/${leagueId}/results`),
+  getMatchDetail: (matchId) => request(`/matches/${matchId}/detail`),
   getFixtures: (leagueId) => request(`/leagues/${leagueId}/fixtures`),
   getClubs: (leagueId) => request(`/leagues/${leagueId}/clubs`),
   getClub: (clubId) => request(`/clubs/${clubId}`),
