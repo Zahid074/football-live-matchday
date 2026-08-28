@@ -30,6 +30,7 @@ function routeFromLocation() {
     return { view: "player", clubId: parts[1], playerId: parts[3] };
   }
   if (parts[0] === "clubs" && parts[1]) return { view: "club", clubId: parts[1] };
+  if (parts[0] === "matches" && parts[1]) return { view: "match", matchId: parts[1] };
   return { view: "home" };
 }
 
@@ -37,6 +38,7 @@ function pathFromRoute(r) {
   if (r.view === "league") return `/leagues/${r.leagueId}${r.tab && r.tab !== "overview" ? `?tab=${r.tab}` : ""}`;
   if (r.view === "club") return `/clubs/${r.clubId}`;
   if (r.view === "player") return `/clubs/${r.clubId}/players/${r.playerId}`;
+  if (r.view === "match") return `/matches/${r.matchId}`;
   return "/";
 }
 
