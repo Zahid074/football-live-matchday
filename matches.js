@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "./db.js";
+import { getMatchDetail } from "./apiFootball.js";
 import { requireAuth } from "./auth.js";
 
 const router = Router();
@@ -49,6 +50,19 @@ router.post("/matches/:matchId/notify", requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update match notification" });
+  }
+});
+
+router.get("/matches/:matchId/detail", async (req, res) => {
+  const { matchId } = req.params;
+  try {
+    const { rows } = await pool.query(`SELECT * FROM matches_cache WHERE match_id = $1`, [matchId]);
+    if (!rows[0]) return res.status(404).json({ error: "Match not found" });
+    const detail = await getMatchDetail(rows[0]);
+    res.json(detail);
+  } catch (err) {
+    console.error("[matches/:matchId/detail]", err.message);
+    res.status(500).json({ error: "Failed to load match stats" });
   }
 });
 
