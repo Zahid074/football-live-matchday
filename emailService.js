@@ -8,6 +8,10 @@ function formatKickoff(kickoffAt) {
   });
 }
 
+function encodeSubject(subject) {
+  return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+}
+
 function wrapEmail({ eyebrow, title, subtitle, bodyHtml }) {
   return `
     <div style="font-family: sans-serif; background:#0A0D0C; color:#fff; padding:24px; border-radius:12px;">
@@ -41,7 +45,7 @@ function createRawEmail({ to, subject, html }) {
   const message = [
     `From: "Live Matchday Wire" <${sender}>`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeSubject(subject)}`,
     "MIME-Version: 1.0",
     'Content-Type: text/html; charset="UTF-8"',
     "",
