@@ -208,67 +208,114 @@ async function runStagedReminder({
   );
 
   for (const match of upcoming) {
+    // IMPORTANT:
+    // Only users who explicitly enabled notification for THIS match
+    // are eligible. Favourite clubs are NOT used for email notifications.
     const { rows: interestedUsers } = await pool.query(
       `SELECT DISTINCT u.id, u.email, u.name
        FROM users u
-       WHERE u.id IN (
-         SELECT f.user_id
-         FROM favorites f
-         JOIN notify_settings ns
-           ON ns.user_id = f.user_id
-          AND ns.club_id = f.club_id
-         WHERE ns.enabled = true
-           AND f.club_id IN ($1, $2)
-
-         UNION
-
-         SELECT mns.user_id
-         FROM match_notify_settings mns
-         WHERE mns.match_id = $3
-           AND mns.enabled = true
-       )`,
-      [
-        match.home_club_id,
-        match.away_club_id,
-        match.match_id,
-      ]
+       JOIN match_notify_settings mns
+         ON mns.user_id = u.id
+       WHERE mns.match_id = $1
+         AND mns.enabled = true`,
+      [match.match_id]
     );
 
     for (const user of interestedUsers) {
-      const { rows: already } = await pool.query(
-        `SELECT 1
-         FROM notified_matches
-         WHERE user_id = $1
-           AND match_id = $2
-           AND stage = $3`,
-        [
-          user.id,
-          match.match_id,
-          stage,
-        ]
-      );
-
-      if (already.length > 0) continue;
+      const client = await pool.connect();
 
       try {
-        await buildAndSend(match, user);
+        await client.query("BEGIN");
 
-        await pool.query(
-          `INSERT INTO notified_matches
-             (user_id, match_id, stage)
-           VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
+        // Prevent two backend processes from sending the same
+        // user + match + stage notification at the same time.
+        await client.query(
+          `SELECT pg_advisory_xact_lock(
+             hashtext($1),
+             hashtext($2)
+           )`,
+          [
+            `${user.id}:${match.match_id}`,
+            stage,
+          ]
+        );
+
+        // Check again after obtaining the lock.
+        const { rows: already } = await client.query(
+          `SELECT 1
+           FROM notified_matches
+           WHERE user_id = $1
+             AND match_id = $2
+             AND stage = $3
+           LIMIT 1`,
           [
             user.id,
             match.match_id,
             stage,
           ]
         );
+
+        if (already.length > 0) {
+          await client.query("ROLLBACK");
+          continue;
+        }
+
+        // Claim this notification BEFORE sending.
+        // This guarantees that another cron/process cannot send it again.
+        await client.query(
+          `INSERT INTO notified_matches
+             (user_id, match_id, stage)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, match_id, stage)
+           DO NOTHING`,
+          [
+            user.id,
+            match.match_id,
+            stage,
+          ]
+        );
+
+        await client.query("COMMIT");
+
+        // Send only after the database claim succeeds.
+        await buildAndSend(match, user);
+
+        console.log(
+          `[${stage}] email sent to ${user.email} for ` +
+          `${match.home_club_name} vs ${match.away_club_name}`
+        );
       } catch (err) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+
+        // If the email failed, remove the claim so the next cron
+        // run can retry it.
+        try {
+          await pool.query(
+            `DELETE FROM notified_matches
+             WHERE user_id = $1
+               AND match_id = $2
+               AND stage = $3`,
+            [
+              user.id,
+              match.match_id,
+              stage,
+            ]
+          );
+        } catch (deleteErr) {
+          console.warn(
+            `[${stage}] failed to remove notification claim:`,
+            deleteErr.message
+          );
+        }
+
         console.warn(
           `[${stage}] email to ${user.email} failed:`,
           err.message
         );
+      } finally {
+        client.release();
       }
     }
   }
@@ -374,48 +421,71 @@ async function sendResultAnnouncements() {
   );
 
   for (const match of finishedMatches) {
+    // IMPORTANT:
+    // Only users who explicitly opted into THIS match.
     const { rows: interestedUsers } = await pool.query(
       `SELECT DISTINCT u.id, u.email, u.name
        FROM users u
-       WHERE u.id IN (
-         SELECT f.user_id
-         FROM favorites f
-         JOIN notify_settings ns
-           ON ns.user_id = f.user_id
-          AND ns.club_id = f.club_id
-         WHERE ns.enabled = true
-           AND f.club_id IN ($1, $2)
-
-         UNION
-
-         SELECT mns.user_id
-         FROM match_notify_settings mns
-         WHERE mns.match_id = $3
-           AND mns.enabled = true
-       )`,
-      [
-        match.home_club_id,
-        match.away_club_id,
-        match.match_id,
-      ]
+       JOIN match_notify_settings mns
+         ON mns.user_id = u.id
+       WHERE mns.match_id = $1
+         AND mns.enabled = true`,
+      [match.match_id]
     );
 
     for (const user of interestedUsers) {
-      const { rows: already } = await pool.query(
-        `SELECT 1
-         FROM notified_matches
-         WHERE user_id = $1
-           AND match_id = $2
-           AND stage = 'result'`,
-        [
-          user.id,
-          match.match_id,
-        ]
-      );
-
-      if (already.length > 0) continue;
+      const client = await pool.connect();
 
       try {
+        await client.query("BEGIN");
+
+        // Lock this exact user + match + stage.
+        await client.query(
+          `SELECT pg_advisory_xact_lock(
+             hashtext($1),
+             hashtext($2)
+           )`,
+          [
+            `${user.id}:${match.match_id}`,
+            "result",
+          ]
+        );
+
+        // Check whether result notification already exists.
+        const { rows: already } = await client.query(
+          `SELECT 1
+           FROM notified_matches
+           WHERE user_id = $1
+             AND match_id = $2
+             AND stage = 'result'
+           LIMIT 1`,
+          [
+            user.id,
+            match.match_id,
+          ]
+        );
+
+        if (already.length > 0) {
+          await client.query("ROLLBACK");
+          continue;
+        }
+
+        // Claim BEFORE sending.
+        await client.query(
+          `INSERT INTO notified_matches
+             (user_id, match_id, stage)
+           VALUES ($1, $2, 'result')
+           ON CONFLICT (user_id, match_id, stage)
+           DO NOTHING`,
+          [
+            user.id,
+            match.match_id,
+          ]
+        );
+
+        await client.query("COMMIT");
+
+        // Now send the email.
         await sendMatchResult({
           to: user.email,
           name: user.name,
@@ -429,25 +499,42 @@ async function sendResultAnnouncements() {
             match.league_id,
         });
 
-        await pool.query(
-          `INSERT INTO notified_matches
-             (user_id, match_id, stage)
-           VALUES ($1, $2, 'result')
-           ON CONFLICT DO NOTHING`,
-          [
-            user.id,
-            match.match_id,
-          ]
-        );
-
         console.log(
-          `[result] email sent to ${user.email} for ${match.home_club_name} ${match.home_score}-${match.away_score} ${match.away_club_name}`
+          `[result] email sent to ${user.email} for ` +
+          `${match.home_club_name} ` +
+          `${match.home_score}-${match.away_score} ` +
+          `${match.away_club_name}`
         );
       } catch (err) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+
+        // Remove the claim if sending failed.
+        try {
+          await pool.query(
+            `DELETE FROM notified_matches
+             WHERE user_id = $1
+               AND match_id = $2
+               AND stage = 'result'`,
+            [
+              user.id,
+              match.match_id,
+            ]
+          );
+        } catch (deleteErr) {
+          console.warn(
+            "[result] failed to remove notification claim:",
+            deleteErr.message
+          );
+        }
+
         console.warn(
           `[result] email to ${user.email} failed:`,
           err.message
         );
+      } finally {
+        client.release();
       }
     }
   }
