@@ -13,12 +13,21 @@ const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 app.use(express.json());
 
-app.get("/", (req, res) => res.json({ ok: true, service: "Live Matchday Wire API" }));
+app.get("/", (req, res) =>
+  res.json({
+    ok: true,
+    service: "Live Matchday Wire API",
+  })
+);
 
 app.use("/api", leaguesRouter);
 app.use("/api", clubsRouter);
 app.use("/api", matchesRouter);
 app.use("/api", meRouter);
+
+// ------------------------------------------------------------
+// Gmail OAuth
+// ------------------------------------------------------------
 
 app.get("/auth/gmail", (req, res) => {
   const url = getGmailAuthUrl();
@@ -45,7 +54,10 @@ app.get("/auth/gmail/callback", async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------
+
 const PORT = process.env.PORT || 4000;
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);
   startCronJobs();
