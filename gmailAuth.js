@@ -25,7 +25,9 @@ export async function saveGmailCode(code) {
   }
 
   console.log("Gmail OAuth successful.");
-  console.log("Save this refresh token as GMAIL_REFRESH_TOKEN in your environment variables.");
+  console.log("REFRESH TOKEN:");
+  console.log(tokens.refresh_token);
+  console.log("Save this value as GMAIL_REFRESH_TOKEN in Render.");
 
   return tokens;
 }
