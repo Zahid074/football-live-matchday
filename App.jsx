@@ -45,10 +45,11 @@ function pathFromRoute(r) {
 export default function App() {
   const { palette: P, mode, toggle } = useTheme();
   const [leagues, setLeagues] = useState([]);
-  const [view, setView] = useState("home"); // home | league | club | player
+    const [view, setView] = useState("home"); // home | league | club | player | match
   const [leagueId, setLeagueId] = useState(null);
   const [clubId, setClubId] = useState(null);
   const [playerId, setPlayerId] = useState(null);
+  const [matchId, setMatchId] = useState(null);
   const [tab, setTab] = useState("overview");
 
   // Apply a route object to React state (used for both pushState navigation
@@ -58,6 +59,7 @@ export default function App() {
     setLeagueId(r.leagueId || null);
     setClubId(r.clubId || null);
     setPlayerId(r.playerId || null);
+    setMatchId(r.matchId || null);
     setTab(r.tab || "overview");
   }, []);
 
@@ -147,6 +149,7 @@ export default function App() {
   const openLeague = (id) => navigate({ view: "league", leagueId: id, tab: "overview" });
   const openClub = (id) => navigate({ view: "club", clubId: id });
   const openPlayer = (cId, pId) => navigate({ view: "player", clubId: cId, playerId: pId });
+  const openMatch = (mId) => navigate({ view: "match", matchId: mId });
   const changeTab = (id) => navigate({ view: "league", leagueId, tab: id });
   const goHome = () => navigate({ view: "home" });
   const goBack = () => window.history.back();
@@ -170,6 +173,7 @@ export default function App() {
           tab={tab} setTab={changeTab}
           onBack={goBack}
           onClub={openClub}
+          onOpenMatch={openMatch}
           favorites={favorites}
           isFavorite={isFavorite}
           toggleFavorite={toggleFavorite}
@@ -200,6 +204,10 @@ export default function App() {
           onBack={goBack}
           onClub={openClub}
         />
+      )}
+
+      {view === "match" && matchId && (
+        <MatchDetailPage P={P} matchId={matchId} onBack={goBack} />
       )}
     </div>
   );
@@ -285,7 +293,7 @@ const MENU = [
   { id: "allClubs", label: "See All Clubs", icon: Users },
 ];
 
-function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, favorites, isFavorite, toggleFavorite, notifySettings, toggleNotify, matchNotifications, toggleMatchNotify, user }) {
+function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, onOpenMatch, favorites, isFavorite, toggleFavorite, notifySettings, toggleNotify, matchNotifications, toggleMatchNotify, user }) {
   const [table, setTable] = useState([]);
   const [results, setResults] = useState([]);
   const [fixtures, setFixtures] = useState([]);
@@ -341,7 +349,7 @@ function LeagueDashboard({ P, leagueId, league, tab, setTab, onBack, onClub, fav
                 </p>
               )}
               {table.length > 0 && <Section P={P} title="Table" icon={Table2}><StandingsTable P={P} rows={table} clubs={clubs} onClub={onClub} accent={league.color} /></Section>}
-              <Section P={P} title="This Season's Results" icon={Trophy}><MatchList P={P} matches={results} empty="No results yet." /></Section>
+              <Section P={P} title="This Season's Results" icon={Trophy}><MatchList P={P} matches={results} empty="No results yet." onOpenMatch={onOpenMatch} /></Section>
               <Section P={P} title="Upcoming Fixtures" icon={Radio}>
                 <MatchList P={P} matches={fixtures} empty="No fixtures scheduled." user={user} matchNotifications={matchNotifications} onToggleMatchNotify={toggleMatchNotify} />
               </Section>
@@ -438,16 +446,19 @@ function StandingsTable({ P, rows, clubs, onClub, accent }) {
   );
 }
 
-function MatchList({ P, matches, empty, user, matchNotifications, onToggleMatchNotify }) {
+function MatchList({ P, matches, empty, user, matchNotifications, onToggleMatchNotify, onOpenMatch }) {
   if (!matches || matches.length === 0) return <p style={{ color: P.textFaint }} className="text-sm">{empty}</p>;
   const isUpcoming = (m) => m.status === "SCHEDULED" || m.status === "TIMED";
   return (
     <div className="space-y-2">
       {matches.map((m) => {
         const on = matchNotifications?.[m.match_id] ?? false;
+        const clickable = onOpenMatch && m.status === "FINISHED";
         return (
-          <div key={m.match_id} className="flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm"
-            style={{ background: P.panel, border: `1px solid ${P.border}` }}>
+          <div key={m.match_id}
+            onClick={clickable ? () => onOpenMatch(m.match_id) : undefined}
+            className="flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm"
+            style={{ background: P.panel, border: `1px solid ${P.border}`, cursor: clickable ? "pointer" : "default" }}>
             <span className="font-semibold flex-1">{m.home_club_name}</span>
             <span className="font-black shrink-0" style={{ color: m.status === "IN_PLAY" || m.status === "PAUSED" ? P.accent : P.textDim }}>
               {m.status === "FINISHED" || m.status === "IN_PLAY" || m.status === "PAUSED"
@@ -857,6 +868,113 @@ function PlayerPage({ P, clubId, playerId, accent, onBack, onClub }) {
         this page shows everything the provider exposes for free-tier squads. The photo above is a
         generated initials avatar, since the API doesn't provide real player photos.
       </p>
+    </div>
+  );
+}
+
+function MatchDetailPage({ P, matchId, onBack }) {
+  const [detail, setDetail] = useState(null);
+  const [tab, setTab] = useState("timeline");
+
+  useEffect(() => {
+    setDetail(null);
+    api.getMatchDetail(matchId).then(setDetail).catch(() => setDetail({ available: false }));
+  }, [matchId]);
+
+  if (!detail) return <div className="max-w-3xl mx-auto px-6 py-10" style={{ color: P.textDim }}>Loading match…</div>;
+
+  if (!detail.available) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-6">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide mb-6" style={{ color: P.textDim }}>
+          <ChevronLeft size={16} /> Back
+        </button>
+        <p className="text-sm" style={{ color: P.textFaint }}>
+          {detail.reason || "এই ম্যাচের স্ট্যাট এখনো পাওয়া যায়নি।"}
+        </p>
+      </div>
+    );
+  }
+
+  const TABS = [
+    { id: "timeline", label: "Timeline" },
+    { id: "lineups", label: "Lineups" },
+    { id: "stats", label: "Stats" },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide mb-6" style={{ color: P.textDim }}>
+        <ChevronLeft size={16} /> Back
+      </button>
+
+      <div className="flex justify-center items-center gap-8 mb-6">
+        <span className="text-3xl font-black">{detail.score.home}</span>
+        <span className="text-sm font-bold uppercase" style={{ color: P.textFaint }}>Full-time</span>
+        <span className="text-3xl font-black">{detail.score.away}</span>
+      </div>
+
+      <div className="flex gap-2 mb-6 justify-center">
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide"
+            style={{ background: tab === t.id ? P.accent : "transparent", border: `1px solid ${P.border}`, color: tab === t.id ? "#0A0D0C" : P.textDim }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "timeline" && <MatchTimeline P={P} events={detail.events} />}
+      {tab === "lineups" && <MatchLineups P={P} lineups={detail.lineups} />}
+      {tab === "stats" && <MatchStats P={P} statistics={detail.statistics} />}
+    </div>
+  );
+}
+
+function MatchTimeline({ P, events }) {
+  if (!events || events.length === 0) return <p className="text-sm" style={{ color: P.textFaint }}>No timeline events.</p>;
+  return (
+    <div className="space-y-3">
+      {[...events].reverse().map((e, i) => (
+        <div key={i} className="rounded-xl px-4 py-3" style={{ background: P.panel, border: `1px solid ${P.border}` }}>
+          <p className="text-xs font-bold uppercase mb-1" style={{ color: P.textFaint }}>
+            {e.minute}'{e.extra ? `+${e.extra}` : ""} · {e.type}
+          </p>
+          <p className="text-sm font-semibold">{e.player || e.detail}</p>
+          <p className="text-xs" style={{ color: P.textDim }}>{e.team}{e.assist ? ` · Assist: ${e.assist}` : ""}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MatchLineups({ P, lineups }) {
+  if (!lineups) return <p className="text-sm" style={{ color: P.textFaint }}>Lineups not available.</p>;
+  const Side = ({ side }) => (
+    <div className="mb-6">
+      <p className="text-sm font-bold mb-2">{side.teamName} <span style={{ color: P.textFaint }}>({side.formation})</span></p>
+      {side.startXI.map((p, i) => (
+        <div key={i} className="flex items-center justify-between text-sm py-1" style={{ borderBottom: `1px solid ${P.border}` }}>
+          <span>{p.number}. {p.name}</span>
+          {p.rating && <span className="font-black" style={{ color: P.accent }}>{p.rating}</span>}
+        </div>
+      ))}
+    </div>
+  );
+  return <div><Side side={lineups.home} /><Side side={lineups.away} /></div>;
+}
+
+function MatchStats({ P, statistics }) {
+  if (!statistics || statistics.length === 0) return <p className="text-sm" style={{ color: P.textFaint }}>Stats not available.</p>;
+  return (
+    <div className="space-y-3">
+      {statistics.map((s, i) => (
+        <div key={i}>
+          <div className="flex justify-between text-xs mb-1" style={{ color: P.textDim }}>
+            <span>{s.home ?? "-"}</span><span className="font-bold">{s.label}</span><span>{s.away ?? "-"}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
