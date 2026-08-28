@@ -195,3 +195,69 @@ export async function sendLineupAnnouncement({
     }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Stage 4 — sent after the match is finished.
+// ---------------------------------------------------------------------------
+export async function sendMatchResult({
+  to,
+  name,
+  homeTeam,
+  awayTeam,
+  homeScore,
+  awayScore,
+  kickoffAt,
+  leagueName,
+}) {
+  const kickoffTime = formatKickoff(kickoffAt);
+
+  let resultText = "Match ended";
+
+  if (homeScore > awayScore) {
+    resultText = `${homeTeam} won`;
+  } else if (awayScore > homeScore) {
+    resultText = `${awayTeam} won`;
+  } else {
+    resultText = "The match ended in a draw";
+  }
+
+  await sendEmail({
+    to,
+    subject: `🏁 Full-time: ${homeTeam} ${homeScore}-${awayScore} ${awayTeam}`,
+    html: wrapEmail({
+      eyebrow: "Final Result",
+      title: `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`,
+      subtitle: `${leagueName} • ${resultText}`,
+      bodyHtml: `
+        <div style="
+          margin-top:24px;
+          padding:20px;
+          background:#121715;
+          border-radius:12px;
+          text-align:center;
+        ">
+          <p style="color:#999; font-size:12px; margin:0 0 12px;">
+            FULL-TIME
+          </p>
+
+          <p style="font-size:24px; font-weight:bold; margin:0;">
+            ${homeTeam}
+            <span style="color:#C9FF3D; margin:0 10px;">
+              ${homeScore} - ${awayScore}
+            </span>
+            ${awayTeam}
+          </p>
+        </div>
+
+        <p style="color:#999; font-size:13px; margin-top:20px;">
+          Hi ${name || "there"}, the match has finished.
+          Here is the final score.
+        </p>
+
+        <p style="color:#666; font-size:12px; margin-top:20px;">
+          Kickoff: ${kickoffTime}
+        </p>
+      `,
+    }),
+  });
+}
