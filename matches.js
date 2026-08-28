@@ -22,10 +22,21 @@ router.get("/matches/live", async (req, res) => {
 router.get("/me/favorites/matches", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT m.* FROM matches_cache m
-       JOIN favorites f ON f.user_id = $1 AND (f.club_id = m.home_club_id OR f.club_id = m.away_club_id)
-       WHERE m.status IN ('IN_PLAY','PAUSED')
-          OR (m.status IN ('SCHEDULED','TIMED') AND m.kickoff_at <= now() + interval '30 minutes')
+      `SELECT DISTINCT m.* FROM matches_cache m
+       WHERE (
+         EXISTS (
+           SELECT 1 FROM favorites f
+           WHERE f.user_id = $1 AND (f.club_id = m.home_club_id OR f.club_id = m.away_club_id)
+         )
+         OR EXISTS (
+           SELECT 1 FROM match_notify_settings mns
+           WHERE mns.user_id = $1 AND mns.match_id = m.match_id AND mns.enabled = true
+         )
+       )
+       AND (
+         m.status IN ('IN_PLAY','PAUSED')
+         OR (m.status IN ('SCHEDULED','TIMED') AND m.kickoff_at <= now() + interval '30 minutes')
+       )
        ORDER BY m.kickoff_at ASC`,
       [req.userId]
     );
