@@ -1,15 +1,11 @@
 import "dotenv/config";
 import { google } from "googleapis";
-import fs from "fs";
-import path from "path";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
-
-const TOKEN_PATH = path.join(process.cwd(), "gmail-token.json");
 
 export function getGmailAuthUrl() {
   return oauth2Client.generateAuthUrl({
@@ -22,28 +18,30 @@ export function getGmailAuthUrl() {
 export async function saveGmailCode(code) {
   const { tokens } = await oauth2Client.getToken(code);
 
-  fs.writeFileSync(
-    TOKEN_PATH,
-    JSON.stringify(tokens, null, 2)
-  );
+  if (!tokens.refresh_token) {
+    throw new Error(
+      "No refresh token received from Google. Try OAuth again with prompt=consent."
+    );
+  }
 
-  oauth2Client.setCredentials(tokens);
+  console.log("Gmail OAuth successful.");
+  console.log("Save this refresh token as GMAIL_REFRESH_TOKEN in your environment variables.");
 
   return tokens;
 }
 
 export function getGmailClient() {
-  if (!fs.existsSync(TOKEN_PATH)) {
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+
+  if (!refreshToken) {
     throw new Error(
-      "Gmail is not connected. Visit /auth/gmail first."
+      "Gmail is not connected. GMAIL_REFRESH_TOKEN is missing."
     );
   }
 
-  const tokens = JSON.parse(
-    fs.readFileSync(TOKEN_PATH, "utf8")
-  );
-
-  oauth2Client.setCredentials(tokens);
+  oauth2Client.setCredentials({
+    refresh_token: refreshToken,
+  });
 
   return google.gmail({
     version: "v1",
