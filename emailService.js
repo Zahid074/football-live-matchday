@@ -2,9 +2,11 @@ import "dotenv/config";
 import { getGmailClient } from "./gmailAuth.js";
 
 function formatKickoff(kickoffAt) {
-  return new Date(kickoffAt).toLocaleString("en-GB", {
+  return new Date(kickoffAt).toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+    hour12: true,
+    timeZone: "Asia/Dhaka",
   });
 }
 
