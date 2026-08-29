@@ -1,6 +1,6 @@
 <div align="center">
 
-![Header Banner](https://capsule-render.vercel.app/api?type=waving&color=0:339933,50:61DAFB,100:4169E1&height=200&section=header&text=Live%20Matchday%20Wire&fontSize=50&fontColor=ffffff&animation=fadeIn&fontAlignY=35&desc=Real-time%20football%20tracking%20%26%20kickoff%20alerts&descAlignY=55&descSize=18)
+![Header Banner](https://capsule-render.vercel.app/api?type=waving&color=0:339933,50:61DAFB,100:4169E1&height=200&section=header&text=Live%20Matchday%20Wire&fontSize=50&fontColor=ffffff&animation=fadeIn&fontAlignY=35&desc=Real-time%20football%20tracking%20and%20kickoff%20alerts&descAlignY=55&descSize=18)
 
 [![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=339933&center=true&vCenter=true&width=600&lines=Live+scores%2C+every+60+seconds;24h+%2B+2h+kickoff+reminders;Instant+lineup+alerts;Sign+in+with+Google+%26+never+miss+a+match)](https://git.io/typing-svg)
 
