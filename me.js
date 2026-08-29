@@ -95,6 +95,41 @@ router.post("/notify-settings", requireAuth, async (req, res) => {
   }
 });
 
+// Deletes the signed-in user's account, but only if the email they typed
+// in the confirmation box matches their account email exactly.
+router.delete("/me", requireAuth, async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: "email required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(`SELECT email FROM users WHERE id = $1`, [req.userId]);
+    if (!rows[0]) return res.status(404).json({ error: "User not found" });
+
+    const matches = rows[0].email.trim().toLowerCase() === email.trim().toLowerCase();
+    if (!matches) {
+      return res.status(400).json({ error: "Email does not match your account" });
+    }
+
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM match_notify_settings WHERE user_id = $1`, [req.userId]);
+    await client.query(`DELETE FROM notify_settings WHERE user_id = $1`, [req.userId]);
+    await client.query(`DELETE FROM favorites WHERE user_id = $1`, [req.userId]);
+    await client.query(`DELETE FROM users WHERE id = $1`, [req.userId]);
+    await client.query("COMMIT");
+
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete account" });
+  } finally {
+    client.release();
+  }
+});
+
 router.patch("/me/theme", requireAuth, async (req, res) => {
   const { theme } = req.body;
   if (!["light", "dark"].includes(theme)) return res.status(400).json({ error: "theme must be light or dark" });
