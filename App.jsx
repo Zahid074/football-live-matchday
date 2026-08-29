@@ -113,13 +113,48 @@ export default function App() {
     refreshMe();
   };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    setFavorites([]);
-    setNotifySettings({});
-    setMatchNotifications({});
-  };
+    const logout = () => {
+      setToken(null);
+      setUser(null);
+      setFavorites([]);
+      setNotifySettings({});
+      setMatchNotifications({});
+    };
+
+    // --- delete account flow: confirm -> type email -> submit ----------------
+    const [deleteStep, setDeleteStep] = useState(null); // null | "confirm" | "email"
+    const [deleteEmailInput, setDeleteEmailInput] = useState("");
+    const [deleteError, setDeleteError] = useState("");
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
+    const openDeleteConfirm = () => {
+      setDeleteError("");
+      setDeleteEmailInput("");
+      setDeleteStep("confirm");
+    };
+    const cancelDelete = () => {
+      setDeleteStep(null);
+      setDeleteError("");
+      setDeleteEmailInput("");
+    };
+    const confirmDeleteYes = () => {
+      setDeleteError("");
+      setDeleteStep("email");
+    };
+    const submitDeleteAccount = async () => {
+      setDeleteError("");
+      setDeleteLoading(true);
+      try {
+        await api.deleteAccount(deleteEmailInput);
+        logout();
+        setDeleteStep(null);
+        setDeleteEmailInput("");
+      } catch (err) {
+        setDeleteError(err.message || "Email doesn't match.");
+      } finally {
+        setDeleteLoading(false);
+      }
+    };
 
   const isFavorite = (id) => favorites.some((f) => f.club_id === id);
 
@@ -158,8 +193,23 @@ export default function App() {
 
   return (
     <div style={wrapStyle} className="transition-colors duration-300">
-      <TopBar P={P} mode={mode} onToggleTheme={toggle} user={user} onLogout={logout} onGoogleSuccess={handleGoogleSuccess} />
+      <TopBar P={P} mode={mode} onToggleTheme={toggle} user={user} onLogout={logout} onGoogleSuccess={handleGoogleSuccess} onDeleteAccount={openDeleteConfirm} />
       <TopWire P={P} />
+
+      {deleteStep && (
+        <DeleteAccountModal
+          P={P}
+          step={deleteStep}
+          userEmail={user?.email}
+          emailInput={deleteEmailInput}
+          onChangeEmail={setDeleteEmailInput}
+          error={deleteError}
+          loading={deleteLoading}
+          onCancel={cancelDelete}
+          onConfirmYes={confirmDeleteYes}
+          onSubmit={submitDeleteAccount}
+        />
+      )}
 
       {view === "home" && (
         <Home P={P} leagues={leagues.length ? leagues : Object.entries(LEAGUE_META).map(([id, m]) => ({ id, ...m }))} onOpen={openLeague} />
@@ -215,7 +265,7 @@ export default function App() {
 
 /* ----------------------------- top bar / wire ----------------------------- */
 
-function TopBar({ P, mode, onToggleTheme, user, onLogout, onGoogleSuccess }) {
+function TopBar({ P, mode, onToggleTheme, user, onLogout, onGoogleSuccess, onDeleteAccount }) {
   return (
     <div className="flex items-center justify-between px-6 py-3" style={{ borderBottom: `1px solid ${P.border}` }}>
       <div className="flex items-center gap-2 font-black uppercase tracking-tight text-sm">
@@ -226,16 +276,81 @@ function TopBar({ P, mode, onToggleTheme, user, onLogout, onGoogleSuccess }) {
           {mode === "dark" ? <Sun size={14} /> : <Moon size={14} />}
         </button>
         {user ? (
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <span style={{ color: P.textDim }}>{user.email}</span>
-            <button onClick={onLogout} className="p-2 rounded-full" style={{ border: `1px solid ${P.border}` }}>
-              <LogOut size={13} />
+          <div className="flex flex-col items-end gap-1 text-xs font-semibold">
+            <div className="flex items-center gap-2">
+              <span style={{ color: P.textDim }}>{user.email}</span>
+              <button onClick={onLogout} className="p-2 rounded-full" style={{ border: `1px solid ${P.border}` }}>
+                <LogOut size={13} />
+              </button>
+            </div>
+            <button onClick={onDeleteAccount} className="text-[10px] font-semibold underline underline-offset-2" style={{ color: "#EF4444" }}>
+              Delete my account
             </button>
           </div>
         ) : (
           <div className="scale-90 origin-right">
             <GoogleLogin onSuccess={onGoogleSuccess} onError={() => alert("Google sign-in failed")} size="medium" theme={mode === "dark" ? "filled_black" : "outline"} />
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------- delete account modal ---------------------------
+   Step 1 ("confirm"): "Are you sure?" with Yes / No.
+   Step 2 ("email"): user must type their own email exactly; Submit checks
+   it against their account email and only then calls the delete API. */
+function DeleteAccountModal({ P, step, userEmail, emailInput, onChangeEmail, error, loading, onCancel, onConfirmYes, onSubmit }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: P.panel, border: `1px solid ${P.border}`, color: P.text }}>
+        {step === "confirm" && (
+          <>
+            <h3 className="text-base font-black mb-2">Are you sure?</h3>
+            <p className="text-xs mb-5" style={{ color: P.textDim }}>
+              এই অ্যাকাউন্টটি ডিলিট করলে তোমার সব ফেভারিট ক্লাব ও নোটিফিকেশন সেটিংস স্থায়ীভাবে মুছে যাবে। এটি আর ফেরানো যাবে না।
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={onCancel} className="px-4 py-2 rounded-full text-xs font-bold" style={{ border: `1px solid ${P.border}` }}>
+                No
+              </button>
+              <button onClick={onConfirmYes} className="px-4 py-2 rounded-full text-xs font-bold text-white" style={{ background: "#EF4444" }}>
+                Yes
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "email" && (
+          <>
+            <h3 className="text-base font-black mb-2">Confirm with your email</h3>
+            <p className="text-xs mb-3" style={{ color: P.textDim }}>
+              নিশ্চিত হওয়ার জন্য নিচের বক্সে তোমার ইমেইল ({userEmail}) হুবহু লিখে সাবমিট করো।
+            </p>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => onChangeEmail(e.target.value)}
+              placeholder={userEmail}
+              className="w-full px-3 py-2 rounded-lg text-sm mb-2 outline-none"
+              style={{ background: P.bg, border: `1px solid ${P.border}`, color: P.text }}
+            />
+            {error && <p className="text-xs mb-2" style={{ color: "#EF4444" }}>{error}</p>}
+            <div className="flex gap-3 justify-end mt-3">
+              <button onClick={onCancel} className="px-4 py-2 rounded-full text-xs font-bold" style={{ border: `1px solid ${P.border}` }}>
+                Cancel
+              </button>
+              <button
+                onClick={onSubmit}
+                disabled={loading || !emailInput.trim()}
+                className="px-4 py-2 rounded-full text-xs font-bold text-white disabled:opacity-50"
+                style={{ background: "#EF4444" }}
+              >
+                {loading ? "Deleting…" : "Submit"}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
