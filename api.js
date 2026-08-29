@@ -39,6 +39,7 @@ export const api = {
 
   loginWithGoogle: (idToken) => request("/auth/google", { method: "POST", body: { idToken } }),
   getMe: () => request("/me"),
+  deleteAccount: (email) => request("/me", { method: "DELETE", body: { email } }),
   addFavorite: (clubId, leagueId) => request("/favorites", { method: "POST", body: { clubId, leagueId } }),
   removeFavorite: (clubId) => request(`/favorites/${clubId}`, { method: "DELETE" }),
   setNotify: (clubId, enabled) => request("/notify-settings", { method: "POST", body: { clubId, enabled } }),
