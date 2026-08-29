@@ -309,7 +309,7 @@ function DeleteAccountModal({ P, step, userEmail, emailInput, onChangeEmail, err
           <>
             <h3 className="text-base font-black mb-2">Are you sure?</h3>
             <p className="text-xs mb-5" style={{ color: P.textDim }}>
-              এই অ্যাকাউন্টটি ডিলিট করলে তোমার সব ফেভারিট ক্লাব ও নোটিফিকেশন সেটিংস স্থায়ীভাবে মুছে যাবে। এটি আর ফেরানো যাবে না।
+              Deleting this account will permanently remove all your favorite clubs and notification settings. This action cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={onCancel} className="px-4 py-2 rounded-full text-xs font-bold" style={{ border: `1px solid ${P.border}` }}>
@@ -326,7 +326,7 @@ function DeleteAccountModal({ P, step, userEmail, emailInput, onChangeEmail, err
           <>
             <h3 className="text-base font-black mb-2">Confirm with your email</h3>
             <p className="text-xs mb-3" style={{ color: P.textDim }}>
-              নিশ্চিত হওয়ার জন্য নিচের বক্সে তোমার ইমেইল ({userEmail}) হুবহু লিখে সাবমিট করো।
+              To confirm, enter your email ({userEmail}) exactly as shown in the box below and submit.
             </p>
             <input
               type="email"
