@@ -1,8 +1,8 @@
 <div align="center">
 
-# ⚽ Live Matchday Wire
+![Header Banner](https://capsule-render.vercel.app/api?type=waving&color=0:339933,50:61DAFB,100:4169E1&height=200&section=header&text=Live%20Matchday%20Wire&fontSize=50&fontColor=ffffff&animation=fadeIn&fontAlignY=35&desc=Real-time%20football%20tracking%20%26%20kickoff%20alerts&descAlignY=55&descSize=18)
 
-### Real-time football tracking, kickoff reminders & lineup alerts — straight to your inbox
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=339933&center=true&vCenter=true&width=600&lines=Live+scores%2C+every+60+seconds;24h+%2B+2h+kickoff+reminders;Instant+lineup+alerts;Sign+in+with+Google+%26+never+miss+a+match)](https://git.io/typing-svg)
 
 [![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -12,7 +12,9 @@
 
 [![Deployed on Vercel](https://img.shields.io/badge/Frontend-Vercel-000000?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/)
 [![Deployed on Render](https://img.shields.io/badge/Backend-Render-46E3B7?style=flat-square&logo=render&logoColor=white)](https://render.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](#-license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+### 🔗 [**Live Demo →**](http://football-live-matchday.vercel.app)
 
 </div>
 
@@ -125,7 +127,7 @@ football-live-matchday/
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/<your-username>/football-live-matchday.git
+git clone https://github.com/Zahid074/football-live-matchday.git
 cd football-live-matchday
 ```
 
@@ -149,6 +151,8 @@ npm run dev
 Visit **http://localhost:5173** 🎉
 
 ### Environment Variables
+
+> ⚠️ Never commit your real `.env` file. Only `.env.example` (with empty/placeholder values) should be tracked in git — make sure `.env` is listed in `.gitignore`.
 
 <details>
 <summary><strong>Backend (<code>.env</code>)</strong></summary>
@@ -191,7 +195,7 @@ VITE_GOOGLE_CLIENT_ID=
 
 | Service | Platform | Notes |
 |---|---|---|
-| Frontend | **Vercel** | Auto-deploys from `main` |
+| Frontend | **Vercel** | Auto-deploys from `main` — [Live](http://football-live-matchday.vercel.app) |
 | Backend | **Render** | Free web service (spins down after 15 min idle) |
 | Database | **Neon** | Serverless PostgreSQL |
 
@@ -199,12 +203,14 @@ VITE_GOOGLE_CLIENT_ID=
 
 ## 📜 License
 
-This project is licensed under the **MIT License**.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
 ---
 
 <div align="center">
 
 Made with ⚽ + ☕ by **Zahid**
+
+![Footer Banner](https://capsule-render.vercel.app/api?type=waving&color=0:4169E1,50:61DAFB,100:339933&height=120&section=footer)
 
 </div>
