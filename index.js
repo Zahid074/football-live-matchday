@@ -208,17 +208,19 @@ async function runStagedReminder({
   );
 
   for (const match of upcoming) {
-    // IMPORTANT:
-    // Only users who explicitly enabled notification for THIS match
-    // are eligible. Favourite clubs are NOT used for email notifications.
+    // Eligible users = (a) explicitly enabled notification for THIS match,
+    // OR (b) have notifications enabled for either club playing (favourites).
     const { rows: interestedUsers } = await pool.query(
       `SELECT DISTINCT u.id, u.email, u.name
        FROM users u
-       JOIN match_notify_settings mns
-         ON mns.user_id = u.id
-       WHERE mns.match_id = $1
-         AND mns.enabled = true`,
-      [match.match_id]
+       WHERE u.id IN (
+         SELECT user_id FROM match_notify_settings
+         WHERE match_id = $1 AND enabled = true
+         UNION
+         SELECT user_id FROM notify_settings
+         WHERE enabled = true AND club_id IN ($2, $3)
+       )`,
+      [match.match_id, match.home_club_id, match.away_club_id]
     );
 
     for (const user of interestedUsers) {
@@ -421,16 +423,19 @@ async function sendResultAnnouncements() {
   );
 
   for (const match of finishedMatches) {
-    // IMPORTANT:
-    // Only users who explicitly opted into THIS match.
+    // Eligible users = (a) explicitly opted into THIS match,
+    // OR (b) have notifications enabled for either club playing (favourites).
     const { rows: interestedUsers } = await pool.query(
       `SELECT DISTINCT u.id, u.email, u.name
        FROM users u
-       JOIN match_notify_settings mns
-         ON mns.user_id = u.id
-       WHERE mns.match_id = $1
-         AND mns.enabled = true`,
-      [match.match_id]
+       WHERE u.id IN (
+         SELECT user_id FROM match_notify_settings
+         WHERE match_id = $1 AND enabled = true
+         UNION
+         SELECT user_id FROM notify_settings
+         WHERE enabled = true AND club_id IN ($2, $3)
+       )`,
+      [match.match_id, match.home_club_id, match.away_club_id]
     );
 
     for (const user of interestedUsers) {
