@@ -13,6 +13,7 @@ const LEAGUE_META = {
   bundesliga: { name: "Bundesliga", country: "Germany", color: "#D3010C" },
   seriea: { name: "Serie A", country: "Italy", color: "#024494" },
   ligue1: { name: "Ligue 1", country: "France", color: "#0D1A5C" },
+  ucl: { name: "UEFA Champions League", country: "Europe", color: "#0E1E5B" },
   mls: { name: "MLS", country: "USA/Canada", color: "#A5122A" },
 };
 
