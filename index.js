@@ -17,6 +17,7 @@ const LEAGUE_NAMES = {
   bundesliga: "Bundesliga",
   seriea: "Serie A",
   ligue1: "Ligue 1",
+  ucl: "UEFA Champions League",
   mls: "MLS",
 };
 
