@@ -381,7 +381,7 @@ function TopWire({ P }) {
 function Home({ P, leagues, onOpen }) {
   return (
     <div className="max-w-6xl mx-auto px-6 py-14">
-      <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Six Leagues. One Wire.</h1>
+            <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Seven Leagues. One Wire.</h1>
       <p className="mb-10" style={{ color: P.textDim }}>Live scores, squads, formations and kickoff alerts — pick a league to dive in.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {leagues.map((l) => (
