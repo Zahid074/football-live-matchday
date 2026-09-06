@@ -10,6 +10,7 @@ const LEAGUES = [
   { id: "bundesliga", name: "Bundesliga", country: "Germany", color: "#D3010C" },
   { id: "seriea", name: "Serie A", country: "Italy", color: "#024494" },
   { id: "ligue1", name: "Ligue 1", country: "France", color: "#0D1A5C" },
+  { id: "ucl", name: "UEFA Champions League", country: "Europe", color: "#0E1E5B" },
   { id: "mls", name: "MLS", country: "USA/Canada", color: "#A5122A" },
 ];
 
