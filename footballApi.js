@@ -13,6 +13,7 @@ export const LEAGUE_CODES = {
   bundesliga: "BL1",
   seriea: "SA",
   ligue1: "FL1",
+  ucl: "CL",
   mls: "MLS", // may be unavailable on free tier
 };
 
