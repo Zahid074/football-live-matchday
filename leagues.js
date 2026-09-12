@@ -86,7 +86,10 @@ router.get("/leagues/:leagueId/results", async (req, res) => {
 router.get("/leagues/:leagueId/fixtures", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM matches_cache WHERE league_id = $1 AND status IN ('SCHEDULED','TIMED')
+      `SELECT * FROM matches_cache
+       WHERE league_id = $1
+         AND status IN ('SCHEDULED','TIMED')
+         AND kickoff_at >= now()
        ORDER BY kickoff_at ASC LIMIT 50`,
       [req.params.leagueId]
     );
