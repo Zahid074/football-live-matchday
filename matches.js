@@ -35,7 +35,10 @@ router.get("/me/favorites/matches", requireAuth, async (req, res) => {
        )
        AND (
          m.status IN ('IN_PLAY','PAUSED')
-         OR (m.status IN ('SCHEDULED','TIMED') AND m.kickoff_at <= now() + interval '30 minutes')
+         OR (
+           m.status IN ('SCHEDULED','TIMED')
+           AND m.kickoff_at BETWEEN now() - interval '3 hours' AND now() + interval '30 minutes'
+         )
        )
        ORDER BY m.kickoff_at ASC`,
       [req.userId]
