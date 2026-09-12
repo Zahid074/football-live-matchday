@@ -73,6 +73,9 @@ async function syncSquads() {
 async function syncFixturesResults() {
   for (const leagueId of LEAGUE_IDS) {
     try {
+      // পরপর ৭টা লিগের request এক নিঃশ্বাসে না পাঠিয়ে সামান্য gap দাও —
+      // এতে pattern কম bot-like লাগে, abuse-flag হওয়ার সম্ভাবনা কমে
+      await new Promise((r) => setTimeout(r, 2000));
       const standings = await api.getStandings(leagueId);
 
       if (standings) {
