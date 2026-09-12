@@ -148,6 +148,32 @@ export async function getMatch(matchId) {
   return mapMatch(null)(data);
 }
 
+// Reverse lookup: football-data.org competition code -> our internal league id
+const CODE_TO_LEAGUE_ID = Object.fromEntries(
+  Object.entries(LEAGUE_CODES).map(([leagueId, code]) => [code, leagueId])
+);
+
+/**
+ * Global /v4/matches — returns matches across EVERY competition our key can
+ * see, in a single request, instead of looping per league. Use this for the
+ * cron sync/poll paths to keep daily request volume low.
+ */
+export async function getMatchesGlobal({ status, dateFrom, dateTo } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const data = await safeRequest(`/matches${qs}`, { matches: [] });
+  return (data.matches || [])
+    .map((m) => {
+      const leagueId = CODE_TO_LEAGUE_ID[m.competition?.code];
+      if (!leagueId) return null; // আমাদের tracked লিগের বাইরের কিছু হলে বাদ দাও
+      return mapMatch(leagueId)(m);
+    })
+    .filter(Boolean);
+}
+
 function mapMatch(leagueId) {
   return (m) => ({
     match_id: String(m.id),
