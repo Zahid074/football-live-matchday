@@ -106,7 +106,20 @@ async function syncFixturesResults() {
         }
       }
 
-      const matches = await api.getMatches(leagueId, {});
+      // football-data.org কে explicit date range দেওয়া জরুরি —
+      // কোনো range না দিলে পুরনো match গুলো re-sync হয় না এবং
+      // status চিরকাল SCHEDULED/TIMED থেকে যায়। Free-tier এ range
+      // সাধারণত 10 দিনের বেশি হয় না, তাই দুই ভাগে ভাগ করে নাও।
+      const isoDate = (d) => d.toISOString().slice(0, 10);
+      const today = new Date();
+      const pastFrom = new Date(today); pastFrom.setDate(pastFrom.getDate() - 5);
+      const futureTo = new Date(today); futureTo.setDate(futureTo.getDate() + 10);
+
+      const [pastMatches, upcomingMatches] = await Promise.all([
+        api.getMatches(leagueId, { dateFrom: isoDate(pastFrom), dateTo: isoDate(today) }),
+        api.getMatches(leagueId, { dateFrom: isoDate(today), dateTo: isoDate(futureTo) }),
+      ]);
+      const matches = [...pastMatches, ...upcomingMatches];
 
       for (const m of matches) {
         await upsertMatch(m);
