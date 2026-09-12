@@ -67,10 +67,45 @@ async function syncSquads() {
   }
 }
 
+const isoDate = (d) => d.toISOString().slice(0, 10);
+
 // ---------------------------------------------------------------------------
 // 2) syncFixturesResults — every 30 min
+//
+// আগে এটা ৭টা লিগ ঘুরে প্রতিটার জন্য আলাদা call করত (14 call/cycle)।
+// football-data.org-এর global /v4/matches endpoint একবারে সব subscribed
+// competition-এর match দেয়, তাই এখন মাত্র ২টা call (past window + future
+// window) লাগে — বাকি সব লিগ একসাথে চলে আসে।
 // ---------------------------------------------------------------------------
 async function syncFixturesResults() {
+  try {
+    const today = new Date();
+    const pastFrom = new Date(today); pastFrom.setDate(pastFrom.getDate() - 5);
+    const futureTo = new Date(today); futureTo.setDate(futureTo.getDate() + 10);
+
+    const [pastMatches, upcomingMatches] = await Promise.all([
+      api.getMatchesGlobal({ dateFrom: isoDate(pastFrom), dateTo: isoDate(today) }),
+      api.getMatchesGlobal({ dateFrom: isoDate(today), dateTo: isoDate(futureTo) }),
+    ]);
+    const matches = [...pastMatches, ...upcomingMatches];
+
+    for (const m of matches) {
+      await upsertMatch(m);
+    }
+
+    console.log(
+      `[syncFixturesResults] ${matches.length} matches synced (all leagues, 2 calls)`
+    );
+  } catch (err) {
+    console.warn(`[syncFixturesResults] failed:`, err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2b) syncStandings — every hour (আলাদা করা হলো, কারণ standings ম্যাচ শেষ
+// হলে তবেই বদলায়, প্রতি 30 min sync করার দরকার নেই)
+// ---------------------------------------------------------------------------
+async function syncStandings() {
   for (const leagueId of LEAGUE_IDS) {
     try {
       // পরপর ৭টা লিগের request এক নিঃশ্বাসে না পাঠিয়ে সামান্য gap দাও —
@@ -78,101 +113,70 @@ async function syncFixturesResults() {
       await new Promise((r) => setTimeout(r, 2000));
       const standings = await api.getStandings(leagueId);
 
-      if (standings) {
-        for (const row of standings) {
-          await pool.query(
-            `INSERT INTO standings_cache
-               (league_id, club_id, position, played, won, draw, lost,
-                points, goal_diff, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
-             ON CONFLICT (league_id, club_id) DO UPDATE SET
-               position = EXCLUDED.position,
-               played = EXCLUDED.played,
-               won = EXCLUDED.won,
-               draw = EXCLUDED.draw,
-               lost = EXCLUDED.lost,
-               points = EXCLUDED.points,
-               goal_diff = EXCLUDED.goal_diff,
-               updated_at = now()`,
-            [
-              leagueId,
-              row.club_id,
-              row.position,
-              row.played,
-              row.won,
-              row.draw,
-              row.lost,
-              row.points,
-              row.goal_diff,
-            ]
-          );
-        }
+      if (!standings) continue;
+
+      for (const row of standings) {
+        await pool.query(
+          `INSERT INTO standings_cache
+             (league_id, club_id, position, played, won, draw, lost,
+              points, goal_diff, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+           ON CONFLICT (league_id, club_id) DO UPDATE SET
+             position = EXCLUDED.position,
+             played = EXCLUDED.played,
+             won = EXCLUDED.won,
+             draw = EXCLUDED.draw,
+             lost = EXCLUDED.lost,
+             points = EXCLUDED.points,
+             goal_diff = EXCLUDED.goal_diff,
+             updated_at = now()`,
+          [
+            leagueId,
+            row.club_id,
+            row.position,
+            row.played,
+            row.won,
+            row.draw,
+            row.lost,
+            row.points,
+            row.goal_diff,
+          ]
+        );
       }
-
-      // football-data.org কে explicit date range দেওয়া জরুরি —
-      // কোনো range না দিলে পুরনো match গুলো re-sync হয় না এবং
-      // status চিরকাল SCHEDULED/TIMED থেকে যায়। Free-tier এ range
-      // সাধারণত 10 দিনের বেশি হয় না, তাই দুই ভাগে ভাগ করে নাও।
-      const isoDate = (d) => d.toISOString().slice(0, 10);
-      const today = new Date();
-      const pastFrom = new Date(today); pastFrom.setDate(pastFrom.getDate() - 5);
-      const futureTo = new Date(today); futureTo.setDate(futureTo.getDate() + 10);
-
-      const [pastMatches, upcomingMatches] = await Promise.all([
-        api.getMatches(leagueId, { dateFrom: isoDate(pastFrom), dateTo: isoDate(today) }),
-        api.getMatches(leagueId, { dateFrom: isoDate(today), dateTo: isoDate(futureTo) }),
-      ]);
-      const matches = [...pastMatches, ...upcomingMatches];
-
-      for (const m of matches) {
-        await upsertMatch(m);
-      }
-
-      console.log(
-        `[syncFixturesResults] ${leagueId}: ${matches.length} matches synced`
-      );
     } catch (err) {
-      console.warn(
-        `[syncFixturesResults] ${leagueId} failed:`,
-        err.message
-      );
+      console.warn(`[syncStandings] ${leagueId} failed:`, err.message);
     }
   }
 }
 
 // ---------------------------------------------------------------------------
 // 3) pollLiveMatches — every 60s
+//
+// আগে এটা প্রতিটা candidate match-এর জন্য আলাদা call করত — একসাথে অনেক
+// match live থাকলে (busy Saturday) call সংখ্যা বিস্ফোরকভাবে বেড়ে যেত।
+// এখন প্রথমে DB-তেই বিনামূল্যে চেক করা হয় আজ ট্র্যাক করার মতো কিছু আছে
+// কিনা — থাকলে তবেই ১টা global call দিয়ে আজকের সব লিগের সব match
+// (live/finished/upcoming — status যাই থাকুক) একসাথে refresh হয়।
 // ---------------------------------------------------------------------------
 async function pollLiveMatches() {
   const { rows: candidates } = await pool.query(
-    `SELECT match_id, league_id
-     FROM matches_cache
+    `SELECT 1 FROM matches_cache
      WHERE status IN ('IN_PLAY','PAUSED')
-        OR (
-          status IN ('SCHEDULED','TIMED')
-          AND kickoff_at <= now()
-          AND kickoff_at >= now() - interval '3 hours'
-        )`
+        OR (status IN ('SCHEDULED','TIMED') AND kickoff_at::date = now()::date)
+     LIMIT 1`
   );
 
-  if (candidates.length === 0) return;
+  if (candidates.length === 0) return; // আজ কিছুই লাইভ/আসন্ন না — API call এড়িয়ে গেলাম
 
-  for (const c of candidates) {
-    try {
-      const fresh = await api.getMatch(c.match_id);
+  try {
+    const today = isoDate(new Date());
+    const todaysMatches = await api.getMatchesGlobal({ dateFrom: today, dateTo: today });
 
-      if (fresh) {
-        await upsertMatch({
-          ...fresh,
-          league_id: c.league_id,
-        });
-      }
-    } catch (err) {
-      console.warn(
-        `[pollLiveMatches] match ${c.match_id} failed:`,
-        err.message
-      );
+    for (const m of todaysMatches) {
+      await upsertMatch(m);
     }
+  } catch (err) {
+    console.warn(`[pollLiveMatches] failed:`, err.message);
   }
 }
 
@@ -638,6 +642,11 @@ export function startCronJobs() {
   );
 
   cron.schedule(
+    "0 * * * *",
+    syncStandings
+  );
+
+  cron.schedule(
     "*/1 * * * *",
     pollLiveMatches
   );
@@ -667,5 +676,6 @@ export function startCronJobs() {
 
   // Initial sync on boot
   syncFixturesResults();
+  syncStandings();
   syncSquads();
 }
